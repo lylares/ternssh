@@ -11,7 +11,10 @@ export function WorkspaceHeader({ actions }: WorkspaceHeaderProps) {
 
   return (
     <header className="workspace-header">
-      <div className="app-brand">{siteName}</div>
+      <div className="app-brand">
+        <img src="/logo.png" alt="" className="app-brand-logo" />
+        <span className="app-brand-name">{siteName}</span>
+      </div>
       <div className="app-header-actions">
         {actions}
         <HeaderSettingsMenu />

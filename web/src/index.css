@@ -129,11 +129,33 @@ body {
 }
 
 .app-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--color-muted-foreground);
   user-select: none;
+}
+
+.app-brand-logo {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: contain;
+  filter: brightness(0) saturate(100%) contrast(1.35);
+}
+
+html[data-theme="dark"] .app-brand-logo {
+  filter: brightness(0) saturate(100%) contrast(1.35) invert(1);
+}
+
+.app-brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-status,
