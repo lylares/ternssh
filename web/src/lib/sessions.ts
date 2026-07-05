@@ -6,14 +6,11 @@ export interface ServerSession {
   wsUrl: string;
   sftpWsUrl: string;
   status: SessionStatus;
+  reconnectAttempt?: number;
 }
 
-export const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
-  connecting: "连接中",
-  open: "已连接",
-  closed: "已断开",
-  error: "错误",
-};
+export const MAX_SESSION_RECONNECT_ATTEMPTS = 3;
+export const SESSION_RECONNECT_DELAY_MS = 2000;
 
 export function isSessionAlive(status: SessionStatus | undefined): boolean {
   return status === "connecting" || status === "open";

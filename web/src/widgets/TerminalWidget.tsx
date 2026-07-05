@@ -1,7 +1,11 @@
+import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
-import type { ServerSession } from "@/lib/sessions";
+import { useI18n } from "@/i18n";
+import {
+  MAX_SESSION_RECONNECT_ATTEMPTS,
+  type ServerSession,
+} from "@/lib/sessions";
 import { registerTerminalRunner } from "@/lib/terminal-bridge";
 import { cn } from "@/lib/utils";
 import type { TerminalWidgetProps } from "./types";
@@ -18,7 +22,10 @@ function decodeWsPayload(data: string | Blob | ArrayBuffer): string | Promise<st
   return String(data);
 }
 
-function parseControlMessage(data: string): {
+function parseControlMessage(
+  data: string,
+  t: (key: string) => string,
+): {
   kind: "ignore" | "error" | "ready";
   message?: string;
 } | null {
@@ -26,12 +33,14 @@ function parseControlMessage(data: string): {
   try {
     const parsed = JSON.parse(data) as { type?: string; message?: string };
     if (parsed.type === "error") {
-      return { kind: "error", message: parsed.message ?? "连接失败" };
+      return { kind: "error", message: parsed.message ?? t("session.connectFailed") };
     }
     if (
       parsed.type === "status" &&
       (parsed.message?.includes("Shell 已就绪") ||
-        parsed.message?.includes("认证成功"))
+        parsed.message?.includes("Shell ready") ||
+        parsed.message?.includes("认证成功") ||
+        parsed.message?.includes("authenticated"))
     ) {
       return { kind: "ready" };
     }
@@ -46,6 +55,7 @@ interface SessionPaneProps {
   active: boolean;
   onStatusChange: (status: ServerSession["status"]) => void;
   onClosed: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 function SessionPane({
@@ -53,6 +63,7 @@ function SessionPane({
   active,
   onStatusChange,
   onClosed,
+  t,
 }: SessionPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -109,7 +120,18 @@ function SessionPane({
     wsRef.current = ws;
     onStatusChangeRef.current("connecting");
     terminal.reset();
-    terminal.writeln("正在连接 SSH 会话...");
+    if (session.reconnectAttempt && session.reconnectAttempt > 0) {
+      terminal.writeln(
+        t("session.reconnecting", {
+          current: session.reconnectAttempt,
+          max: MAX_SESSION_RECONNECT_ATTEMPTS,
+        }),
+      );
+    } else {
+      terminal.writeln(t("session.connectingSsh"));
+    }
+
+    let disposed = false;
 
     const sendResize = () => {
       const fitAddon = fitAddonRef.current;
@@ -143,25 +165,26 @@ function SessionPane({
     };
 
     ws.onclose = () => {
-      onStatusChangeRef.current("closed");
-      terminal.writeln("\r\n会话已断开。");
+      if (disposed) return;
+      terminal.writeln(`\r\n${t("session.disconnected")}`);
       onClosedRef.current();
     };
 
     ws.onerror = () => {
+      if (disposed) return;
       onStatusChangeRef.current("error");
-      terminal.writeln("\r\nWebSocket 连接失败。");
+      terminal.writeln(`\r\n${t("session.wsFailed")}`);
     };
 
     let ready = false;
     ws.onmessage = (event) => {
       void (async () => {
         const data = await decodeWsPayload(event.data);
-        const control = parseControlMessage(data);
+        const control = parseControlMessage(data, t);
         if (control) {
           if (control.kind === "error") {
             onStatusChangeRef.current("error");
-            terminal.writeln(`\r\n${control.message ?? "连接失败"}`);
+            terminal.writeln(`\r\n${control.message ?? t("session.connectFailed")}`);
             return;
           }
           if (control.kind === "ready" && !ready) {
@@ -183,12 +206,13 @@ function SessionPane({
     });
 
     return () => {
+      disposed = true;
       onData.dispose();
       ws.close();
       wsRef.current = null;
       runCommandRef.current = () => false;
     };
-  }, [session.wsUrl, session.serverId]);
+  }, [session.reconnectAttempt, session.serverId, session.wsUrl, t]);
 
   useEffect(() => {
     if (!active) return;
@@ -227,6 +251,7 @@ export function TerminalWidget({
   onSessionClosed,
   onStatusChange,
 }: TerminalWidgetProps) {
+  const { t } = useI18n();
   const activeSession = sessions.find(
     (session) => session.serverId === activeServerId,
   );
@@ -239,19 +264,20 @@ export function TerminalWidget({
     <div className="relative flex h-full min-h-0 flex-col p-3">
       {sessions.length === 0 && (
         <p className="mb-2 text-sm text-[var(--color-muted-foreground)]">
-          选择服务器并连接以打开会话。已连接的会话可在列表中切换。
+          {t("terminal.emptyHint")}
         </p>
       )}
       <div className="relative min-h-0 flex-1">
         {sessions.map((session) => (
           <SessionPane
             key={`${session.serverId}:${session.sessionId}`}
-            session={session}
             active={session.serverId === activeServerId}
+            session={session}
+            t={t}
+            onClosed={() => onSessionClosed(session.serverId)}
             onStatusChange={(status) =>
               onSessionStatusChange(session.serverId, status)
             }
-            onClosed={() => onSessionClosed(session.serverId)}
           />
         ))}
       </div>

@@ -1,8 +1,9 @@
 import { LayoutGrid } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ADDABLE_WIDGETS } from "./widgets";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { ADDABLE_WIDGETS, widgetTitleKey } from "./widgets";
 
 interface AddWidgetMenuProps {
   existingTypes: Set<string>;
@@ -15,6 +16,7 @@ export function AddWidgetMenu({
   onAdd,
   disabled = false,
 }: AddWidgetMenuProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -51,7 +53,7 @@ export function AddWidgetMenu({
         onClick={() => setOpen((current) => !current)}
       >
         <LayoutGrid className="mr-1 h-3.5 w-3.5" />
-        添加组件
+        {t("header.addWidget")}
       </Button>
 
       {open && (
@@ -75,10 +77,10 @@ export function AddWidgetMenu({
                   setOpen(false);
                 }}
               >
-                {widget.title}
+                {t(widgetTitleKey(widget.type))}
                 {exists && (
                   <span className="ml-2 text-[11px] text-[var(--color-muted-foreground)]">
-                    已添加
+                    {t("common.added")}
                   </span>
                 )}
               </button>

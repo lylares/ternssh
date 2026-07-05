@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { api, type Dashboard, type MeResponse, type TreeNode } from "@/lib/api";
 import {
   isSessionAlive,
-  SESSION_STATUS_LABEL,
+  MAX_SESSION_RECONNECT_ATTEMPTS,
+  SESSION_RECONNECT_DELAY_MS,
   type ServerSession,
   type SessionStatus,
 } from "@/lib/sessions";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
+import { useI18n } from "@/i18n";
 import { parseStatusWidgetConfig } from "@/lib/status-widget-config";
 import { ServerListWidget } from "@/widgets/ServerListWidget";
 import { FileManagerWidget } from "@/widgets/FileManagerWidget";
@@ -24,7 +27,7 @@ import { StatusSettingsDialog } from "./StatusSettingsDialog";
 import { AddWidgetMenu } from "./AddWidgetMenu";
 import { GridDashboard } from "./GridDashboard";
 import { findWidgetPlacement, layoutsEqual, type GridItem } from "./grid-utils";
-import { ADDABLE_WIDGETS, WIDGET_TITLES } from "./widgets";
+import { ADDABLE_WIDGETS, widgetTitleKey } from "./widgets";
 
 const DEFAULT_GRID_ITEM = {
   minW: 2,
@@ -65,6 +68,7 @@ function layoutToWidgets(
 }
 
 export function DashboardView() {
+  const { t } = useI18n();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [layout, setLayout] = useState<GridItem[]>([]);
@@ -92,6 +96,25 @@ export function DashboardView() {
   const dashboardRef = useRef<Dashboard | null>(null);
   const persistTimerRef = useRef<number | null>(null);
   const isEditingRef = useRef(false);
+  const manualDisconnectRef = useRef(new Set<string>());
+  const reconnectAttemptRef = useRef(new Map<string, number>());
+  const reconnectTimerRef = useRef(new Map<string, number>());
+
+  const clearReconnectTimer = useCallback((serverId: string) => {
+    const timer = reconnectTimerRef.current.get(serverId);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      reconnectTimerRef.current.delete(serverId);
+    }
+  }, []);
+
+  const clearReconnectState = useCallback(
+    (serverId: string) => {
+      clearReconnectTimer(serverId);
+      reconnectAttemptRef.current.delete(serverId);
+    },
+    [clearReconnectTimer],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,7 +132,7 @@ export function DashboardView() {
         setLayout(widgetsToLayout(dashboardResponse.widgets));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("dashboard.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -121,54 +144,148 @@ export function DashboardView() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, t]);
 
   useEffect(() => {
     return () => {
       if (persistTimerRef.current !== null) {
         window.clearTimeout(persistTimerRef.current);
       }
+      for (const timer of reconnectTimerRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      reconnectTimerRef.current.clear();
     };
   }, []);
 
+  const scheduleReconnect = useCallback(
+    (serverId: string) => {
+      if (manualDisconnectRef.current.has(serverId)) return;
+      if (!sessionsRef.current[serverId]) return;
+
+      const nextAttempt = (reconnectAttemptRef.current.get(serverId) ?? 0) + 1;
+      if (nextAttempt > MAX_SESSION_RECONNECT_ATTEMPTS) {
+        reconnectAttemptRef.current.delete(serverId);
+        setSessions((current) => {
+          const session = current[serverId];
+          if (!session) return current;
+          return {
+            ...current,
+            [serverId]: {
+              ...session,
+              status: "closed",
+              reconnectAttempt: undefined,
+            },
+          };
+        });
+        setError(
+          t("session.reconnectFailed", {
+            count: MAX_SESSION_RECONNECT_ATTEMPTS,
+          }),
+        );
+        return;
+      }
+
+      reconnectAttemptRef.current.set(serverId, nextAttempt);
+      setSessions((current) => {
+        const session = current[serverId];
+        if (!session) return current;
+        return {
+          ...current,
+          [serverId]: {
+            ...session,
+            status: "connecting",
+            reconnectAttempt: nextAttempt,
+          },
+        };
+      });
+
+      clearReconnectTimer(serverId);
+      const timer = window.setTimeout(() => {
+        reconnectTimerRef.current.delete(serverId);
+        void (async () => {
+          if (manualDisconnectRef.current.has(serverId)) return;
+          if (!sessionsRef.current[serverId]) return;
+
+          try {
+            const created = await api.createSession(serverId);
+            if (manualDisconnectRef.current.has(serverId)) return;
+            if (!sessionsRef.current[serverId]) return;
+
+            setSessions((current) => ({
+              ...current,
+              [serverId]: {
+                serverId,
+                sessionId: created.sessionId,
+                wsUrl: created.wsUrl,
+                sftpWsUrl: created.sftpWsUrl,
+                status: "connecting",
+                reconnectAttempt: nextAttempt,
+              },
+            }));
+          } catch {
+            scheduleReconnect(serverId);
+          }
+        })();
+      }, SESSION_RECONNECT_DELAY_MS);
+      reconnectTimerRef.current.set(serverId, timer);
+    },
+    [clearReconnectTimer],
+  );
+
   const handleSessionStatusChange = useCallback(
     (serverId: string, status: SessionStatus) => {
+      if (status === "open") {
+        clearReconnectState(serverId);
+      }
       setSessions((current) => {
         const session = current[serverId];
         if (!session || session.status === status) return current;
         return {
           ...current,
-          [serverId]: { ...session, status },
+          [serverId]: {
+            ...session,
+            status,
+            reconnectAttempt:
+              status === "open" ? undefined : session.reconnectAttempt,
+          },
         };
       });
     },
-    [],
+    [clearReconnectState],
   );
 
-  const handleSessionClosed = useCallback((serverId: string) => {
-    setSessions((current) => {
-      const session = current[serverId];
-      if (!session) return current;
-      return {
-        ...current,
-        [serverId]: { ...session, status: "closed" },
-      };
-    });
-  }, []);
+  const handleSessionClosed = useCallback(
+    (serverId: string) => {
+      if (manualDisconnectRef.current.has(serverId)) {
+        manualDisconnectRef.current.delete(serverId);
+        return;
+      }
+      scheduleReconnect(serverId);
+    },
+    [scheduleReconnect],
+  );
 
-  const handleDisconnectServer = useCallback((serverId: string) => {
-    setSessions((current) => {
-      const next = { ...current };
-      delete next[serverId];
-      setActiveServerId((active) => {
-        if (active !== serverId) return active;
-        return Object.keys(next)[0] ?? null;
+  const handleDisconnectServer = useCallback(
+    (serverId: string) => {
+      manualDisconnectRef.current.add(serverId);
+      clearReconnectState(serverId);
+      setSessions((current) => {
+        const next = { ...current };
+        delete next[serverId];
+        setActiveServerId((active) => {
+          if (active !== serverId) return active;
+          return Object.keys(next)[0] ?? null;
+        });
+        return next;
       });
-      return next;
-    });
-  }, []);
+    },
+    [clearReconnectState],
+  );
 
   const handleConnectServer = useCallback(async (serverId: string) => {
+    manualDisconnectRef.current.delete(serverId);
+    clearReconnectState(serverId);
     setActiveServerId(serverId);
     const existing = sessionsRef.current[serverId];
     if (existing && isSessionAlive(existing.status)) {
@@ -188,9 +305,9 @@ export function DashboardView() {
         },
       }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建会话失败");
+      setError(err instanceof Error ? err.message : t("dashboard.createSessionFailed"));
     }
-  }, []);
+  }, [clearReconnectState, t]);
 
   const widgetContext = useMemo(
     () => ({
@@ -214,10 +331,12 @@ export function DashboardView() {
     const active = activeServerId ? sessions[activeServerId] : null;
     if (!active) {
       const openCount = sessionList.filter((item) => item.status === "open").length;
-      return openCount > 0 ? `${openCount} 个会话` : "idle";
+      return openCount > 0
+        ? t("dashboard.sessionCount", { count: openCount })
+        : t("common.idle");
     }
-    return SESSION_STATUS_LABEL[active.status] ?? active.status;
-  }, [activeServerId, sessionList, sessions]);
+    return t(`session.${active.status}`);
+  }, [activeServerId, sessionList, sessions, t]);
 
   const existingWidgetTypes = useMemo(
     () => new Set(dashboard?.widgets.map((widget) => widget.type) ?? []),
@@ -245,7 +364,7 @@ export function DashboardView() {
           dashboardRef.current = updated;
           setDashboard(updated);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "保存布局失败");
+          setError(err instanceof Error ? err.message : t("dashboard.saveLayoutFailed"));
         } finally {
           isEditingRef.current = false;
         }
@@ -270,13 +389,13 @@ export function DashboardView() {
         dashboardRef.current = updated;
         setDashboard(updated);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "删除组件失败");
+        setError(err instanceof Error ? err.message : t("dashboard.deleteWidgetFailed"));
         setLayout(widgetsToLayout(dashboardSnapshot.widgets));
       } finally {
         isEditingRef.current = false;
       }
     })();
-  }, [layout]);
+  }, [layout, t]);
 
   const handleWidgetConfigChange = useCallback(
     (widgetId: string, configJson: string) => {
@@ -310,7 +429,7 @@ export function DashboardView() {
           dashboardRef.current = updated;
           setDashboard(updated);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "保存组件配置失败");
+          setError(err instanceof Error ? err.message : t("dashboard.saveWidgetConfigFailed"));
           dashboardRef.current = dashboardSnapshot;
           setDashboard(dashboardSnapshot);
         }
@@ -324,7 +443,7 @@ export function DashboardView() {
     if (!dashboardSnapshot) return;
 
     if (dashboardSnapshot.widgets.some((widget) => widget.type === type)) {
-      setError("该组件已存在，不能重复添加");
+      setError(t("dashboard.widgetExists"));
       return;
     }
 
@@ -367,13 +486,13 @@ export function DashboardView() {
         setDashboard(updated);
         setLayout(widgetsToLayout(updated.widgets));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "添加组件失败");
+        setError(err instanceof Error ? err.message : t("dashboard.addWidgetFailed"));
         setLayout(widgetsToLayout(dashboardSnapshot.widgets));
       } finally {
         isEditingRef.current = false;
       }
     })();
-  }, [layout]);
+  }, [layout, t]);
 
   const handleDeleteServer = async (serverId: string) => {
     handleDisconnectServer(serverId);
@@ -401,7 +520,7 @@ export function DashboardView() {
       const response = await api.moveTreeItem(input);
       setTree(response.tree);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "移动失败");
+      setError(err instanceof Error ? err.message : t("dashboard.moveFailed"));
       await load();
     } finally {
       setTreeMoving(false);
@@ -411,11 +530,9 @@ export function DashboardView() {
   if (loading && !dashboard) {
     return (
       <>
-        <header className="workspace-header">
-          <div className="app-brand">ternssh</div>
-        </header>
+        <WorkspaceHeader />
         <div className="workspace flex items-center justify-center text-sm text-[var(--color-muted-foreground)]">
-          正在加载工作区...
+          {t("dashboard.loading")}
         </div>
       </>
     );
@@ -424,9 +541,7 @@ export function DashboardView() {
   if (error && !dashboard) {
     return (
       <>
-        <header className="workspace-header">
-          <div className="app-brand">ternssh</div>
-        </header>
+        <WorkspaceHeader />
         <div className="workspace flex items-center justify-center text-sm text-red-400">
           {error}
         </div>
@@ -440,23 +555,24 @@ export function DashboardView() {
 
   return (
     <>
-      <header className="workspace-header">
-        <div className="app-brand">ternssh</div>
-        <div className="app-header-actions">
-          <AddWidgetMenu
-            existingTypes={existingWidgetTypes}
-            onAdd={handleAddWidget}
-            disabled={loading}
-          />
-          {me && (
-            <Badge>
-              {me.authMode === "open"
-                ? `开放模式 · ${me.user.display_name ?? "Default"}`
-                : me.user.email ?? me.user.display_name ?? me.user.id}
-            </Badge>
-          )}
-        </div>
-      </header>
+      <WorkspaceHeader
+        actions={
+          <>
+            <AddWidgetMenu
+              existingTypes={existingWidgetTypes}
+              onAdd={handleAddWidget}
+              disabled={loading}
+            />
+            {me && (
+              <Badge>
+                {me.authMode === "open"
+                  ? `${t("header.openMode")} · ${me.user.display_name ?? "Default"}`
+                  : me.user.email ?? me.user.display_name ?? me.user.id}
+              </Badge>
+            )}
+          </>
+        }
+      />
 
       <div className="workspace">
       {error && (
@@ -468,8 +584,8 @@ export function DashboardView() {
         onLayoutChange={handleLayoutChange}
         getItemTitle={(item) => {
           const widget = widgetById.get(item.i);
-          if (!widget) return "组件";
-          return WIDGET_TITLES[widget.type] ?? widget.type;
+          if (!widget) return t("common.widget");
+          return t(widgetTitleKey(widget.type));
         }}
         renderHandleActions={(item) => {
           const widget = widgetById.get(item.i);
@@ -488,7 +604,7 @@ export function DashboardView() {
                   }}
                 >
                   <FolderPlus className="mr-1 h-3 w-3" />
-                  分组
+                  {t("common.group")}
                 </Button>
                 <Button
                   className="widget-no-drag"
@@ -500,7 +616,7 @@ export function DashboardView() {
                   }}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  添加
+                  {t("common.add")}
                 </Button>
               </div>
             );
@@ -516,7 +632,7 @@ export function DashboardView() {
                 className="widget-no-drag"
                 size="sm"
                 variant="secondary"
-                title="删除组件"
+                title={t("widget.deleteTitle")}
                 onClick={() => handleRemoveWidget(item.i)}
               >
                 <X className="h-3.5 w-3.5" />
@@ -531,7 +647,7 @@ export function DashboardView() {
                   className="widget-no-drag"
                   size="sm"
                   variant="secondary"
-                  title="设置"
+                  title={t("common.settings")}
                   onClick={() => setStatusSettingsWidgetId(item.i)}
                 >
                   <Settings className="h-3.5 w-3.5" />
@@ -540,7 +656,7 @@ export function DashboardView() {
                   className="widget-no-drag"
                   size="sm"
                   variant="secondary"
-                  title="删除组件"
+                  title={t("widget.deleteTitle")}
                   onClick={() => handleRemoveWidget(item.i)}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -559,13 +675,13 @@ export function DashboardView() {
                   onClick={() => setQuickCommandAddWidgetId(item.i)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  添加
+                  {t("common.add")}
                 </Button>
                 <Button
                   className="widget-no-drag"
                   size="sm"
                   variant="secondary"
-                  title="删除组件"
+                  title={t("widget.deleteTitle")}
                   onClick={() => handleRemoveWidget(item.i)}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -655,7 +771,7 @@ export function DashboardView() {
 
           return (
             <div className="flex h-full items-center justify-center p-3 text-sm text-[var(--color-muted-foreground)]">
-              {widget.type} 即将推出
+              {t("widget.comingSoon", { type: widget.type })}
             </div>
           );
         }}

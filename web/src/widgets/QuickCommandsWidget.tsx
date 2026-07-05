@@ -1,16 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { Terminal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import {
   parseQuickCommandsConfig,
   serializeQuickCommandsConfig,
   type QuickCommandItem,
 } from "@/lib/quick-commands-config";
-import {
-  isSessionAlive,
-  SESSION_STATUS_LABEL,
-  type ServerSession,
-} from "@/lib/sessions";
+import { isSessionAlive, type ServerSession } from "@/lib/sessions";
 import { runTerminalCommand } from "@/lib/terminal-bridge";
 import { cn } from "@/lib/utils";
 
@@ -22,18 +19,19 @@ export interface QuickCommandsWidgetProps {
 }
 
 interface PresetCommand {
-  label: string;
+  label?: string;
+  labelKey?: string;
   command: string;
 }
 
 interface PresetCommandGroup {
-  title: string;
+  titleKey: string;
   commands: PresetCommand[];
 }
 
 const PRESET_GROUPS: PresetCommandGroup[] = [
   {
-    title: "系统",
+    titleKey: "quickCommands.preset.system",
     commands: [
       { label: "uptime", command: "uptime" },
       { label: "whoami", command: "whoami" },
@@ -41,40 +39,43 @@ const PRESET_GROUPS: PresetCommandGroup[] = [
     ],
   },
   {
-    title: "资源",
+    titleKey: "quickCommands.preset.resources",
     commands: [
-      { label: "磁盘", command: "df -h" },
-      { label: "内存", command: "free -h" },
+      { labelKey: "disk", command: "df -h" },
+      { labelKey: "memory", command: "free -h" },
     ],
   },
   {
-    title: "进程",
+    titleKey: "quickCommands.preset.processes",
     commands: [
-      { label: "Top 内存", command: "ps aux --sort=-%mem | head -10" },
-      { label: "Top CPU", command: "ps aux --sort=-%cpu | head -10" },
+      { labelKey: "topMem", command: "ps aux --sort=-%mem | head -10" },
+      { labelKey: "topCpu", command: "ps aux --sort=-%cpu | head -10" },
     ],
   },
   {
-    title: "Docker",
+    titleKey: "quickCommands.preset.docker",
     commands: [
-      { label: "容器列表", command: "docker ps" },
+      { labelKey: "containers", command: "docker ps" },
       {
-        label: "Compose",
+        labelKey: "compose",
         command: "docker compose ps 2>/dev/null || docker-compose ps",
       },
     ],
   },
   {
-    title: "网络",
+    titleKey: "quickCommands.preset.network",
     commands: [
-      { label: "监听端口", command: "ss -tlnp 2>/dev/null || netstat -tlnp" },
+      {
+        labelKey: "ports",
+        command: "ss -tlnp 2>/dev/null || netstat -tlnp",
+      },
     ],
   },
   {
-    title: "日志",
+    titleKey: "quickCommands.preset.logs",
     commands: [
       {
-        label: "最近日志",
+        labelKey: "recentLogs",
         command:
           "journalctl -n 50 --no-pager 2>/dev/null || tail -n 50 /var/log/syslog 2>/dev/null || dmesg | tail -n 50",
       },
@@ -82,12 +83,21 @@ const PRESET_GROUPS: PresetCommandGroup[] = [
   },
 ];
 
+function sessionStatusLabel(
+  t: (key: string) => string,
+  status: ServerSession["status"] | undefined,
+): string {
+  if (!status) return t("common.idle");
+  return t(`session.${status}`);
+}
+
 export function QuickCommandsWidget({
   activeServerId,
   sessions,
   configJson,
   onConfigChange,
 }: QuickCommandsWidgetProps) {
+  const t = useT();
   const session = activeServerId ? sessions[activeServerId] : null;
   const alive = session ? isSessionAlive(session.status) : false;
   const customCommands = useMemo(
@@ -109,19 +119,21 @@ export function QuickCommandsWidget({
   const handleRun = useCallback(
     (key: string, command: string) => {
       if (!activeServerId) {
-        setError("请先在服务器列表中选择一台服务器");
+        setError(t("quickCommands.selectServerFirst"));
         return;
       }
       if (!alive) {
         setError(
-          `终端未连接（${SESSION_STATUS_LABEL[session?.status ?? "idle"]}）`,
+          t("quickCommands.terminalNotConnected", {
+            status: sessionStatusLabel(t, session?.status),
+          }),
         );
         return;
       }
 
       const ok = runTerminalCommand(activeServerId, command);
       if (!ok) {
-        setError("无法发送到终端，请确认终端组件已打开且会话正常");
+        setError(t("quickCommands.sendFailed"));
         return;
       }
 
@@ -129,7 +141,7 @@ export function QuickCommandsWidget({
       setLastRunKey(key);
       window.setTimeout(() => setLastRunKey(null), 1200);
     },
-    [activeServerId, alive, session?.status],
+    [activeServerId, alive, session?.status, t],
   );
 
   const handleDelete = useCallback(
@@ -139,11 +151,16 @@ export function QuickCommandsWidget({
     [customCommands, saveCustomCommands],
   );
 
+  const presetCommandLabel = (command: PresetCommand) =>
+    command.labelKey
+      ? t(`quickCommands.preset.${command.labelKey}`)
+      : (command.label ?? "");
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3">
       <div className="flex items-start gap-2 text-[11px] text-[var(--color-muted-foreground)]">
         <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <p>点击命令将在当前选中的服务器终端中执行。</p>
+        <p>{t("quickCommands.hint")}</p>
       </div>
 
       {error && (
@@ -154,19 +171,21 @@ export function QuickCommandsWidget({
 
       {!activeServerId && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          未选择服务器
+          {t("quickCommands.noServer")}
         </p>
       )}
 
       {activeServerId && !alive && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          终端状态：{SESSION_STATUS_LABEL[session?.status ?? "idle"]}
+          {t("quickCommands.terminalStatus", {
+            status: sessionStatusLabel(t, session?.status),
+          })}
         </p>
       )}
 
       <section className="space-y-2">
         <h3 className="text-[11px] font-medium text-[var(--color-muted-foreground)]">
-          我的命令
+          {t("quickCommands.myCommands")}
         </h3>
 
         {customCommands.length > 0 ? (
@@ -190,7 +209,7 @@ export function QuickCommandsWidget({
                 <Button
                   className="widget-no-drag h-7 w-7 shrink-0 px-0"
                   size="sm"
-                  title="删除"
+                  title={t("quickCommands.deleteTitle")}
                   variant="ghost"
                   onClick={() => handleDelete(item.id)}
                 >
@@ -201,20 +220,21 @@ export function QuickCommandsWidget({
           </div>
         ) : (
           <p className="text-[11px] text-[var(--color-muted-foreground)]">
-            还没有自定义命令，点击标题栏「添加」创建
+            {t("quickCommands.empty")}
           </p>
         )}
       </section>
 
       <div className="space-y-3">
         {PRESET_GROUPS.map((group) => (
-          <section key={group.title} className="space-y-1.5">
+          <section key={group.titleKey} className="space-y-1.5">
             <h3 className="text-[11px] font-medium text-[var(--color-muted-foreground)]">
-              {group.title}
+              {t(group.titleKey)}
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {group.commands.map((command) => {
-                const key = `preset:${group.title}:${command.label}`;
+                const label = presetCommandLabel(command);
+                const key = `preset:${group.titleKey}:${label}`;
                 return (
                   <Button
                     key={key}
@@ -228,7 +248,7 @@ export function QuickCommandsWidget({
                     variant="secondary"
                     onClick={() => handleRun(key, command.command)}
                   >
-                    {command.label}
+                    {label}
                   </Button>
                 );
               })}

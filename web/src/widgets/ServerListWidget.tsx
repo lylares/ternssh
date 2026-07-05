@@ -8,13 +8,10 @@ import {
   Server,
 } from "lucide-react";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { TreeNode } from "@/lib/api";
-import {
-  isSessionAlive,
-  SESSION_STATUS_LABEL,
-  type SessionStatus,
-} from "@/lib/sessions";
+import { isSessionAlive, type SessionStatus } from "@/lib/sessions";
 import {
   collectAllGroupIds,
   collectAncestorGroupIds,
@@ -57,6 +54,7 @@ export function ServerListWidget({
   onAddGroup,
   onRenameGroup,
 }: ServerListWidgetProps) {
+  const t = useT();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropIntent, setDropIntent] = useState<DropIntent | null>(null);
@@ -116,16 +114,16 @@ export function ServerListWidget({
       return [
         {
           id: "add-server",
-          label: "添加服务器",
+          label: t("serverList.addServer"),
           onSelect: () => onAddServer(null),
         },
         {
           id: "add-group",
-          label: "新建分组",
+          label: t("serverList.addGroup"),
           onSelect: () => onAddGroup(null),
         },
-        { id: "expand-all", label: "全部展开", onSelect: expandAll },
-        { id: "collapse-all", label: "全部收起", onSelect: collapseAll },
+        { id: "expand-all", label: t("serverList.expandAll"), onSelect: expandAll },
+        { id: "collapse-all", label: t("serverList.collapseAll"), onSelect: collapseAll },
       ];
     }
 
@@ -134,12 +132,12 @@ export function ServerListWidget({
       return [
         {
           id: "toggle",
-          label: isOpen ? "收起" : "展开",
+          label: isOpen ? t("serverList.collapse") : t("serverList.expand"),
           onSelect: () => toggleExpanded(id),
         },
         {
           id: "add-server",
-          label: "添加服务器",
+          label: t("serverList.addServer"),
           onSelect: () => {
             setExpanded((current) => new Set(current).add(id));
             onAddServer(id);
@@ -147,7 +145,7 @@ export function ServerListWidget({
         },
         {
           id: "add-subgroup",
-          label: "新建子分组",
+          label: t("serverList.addSubGroup"),
           onSelect: () => {
             setExpanded((current) => new Set(current).add(id));
             onAddGroup(id);
@@ -155,19 +153,19 @@ export function ServerListWidget({
         },
         {
           id: "rename",
-          label: "重命名",
+          label: t("serverList.rename"),
           onSelect: () => onRenameGroup(id, name),
         },
         {
           id: "delete",
-          label: "删除分组",
+          label: t("serverList.deleteGroup"),
           danger: true,
           onSelect: () => onDeleteGroup(id),
         },
       ];
     }
 
-    const { id, name } = menu.target;
+    const { id } = menu.target;
     const session = context.sessions[id];
     const isActive = context.activeServerId === id;
     const alive = isSessionAlive(session?.status);
@@ -176,36 +174,36 @@ export function ServerListWidget({
     if (alive && !isActive) {
       items.push({
         id: "switch",
-        label: "切换",
+        label: t("serverList.switch"),
         onSelect: () => context.onSelectServer(id),
       });
     }
     if (alive) {
       items.push({
         id: "disconnect",
-        label: "断开连接",
+        label: t("serverList.disconnect"),
         onSelect: () => context.onDisconnectServer(id),
       });
     } else {
       items.push({
         id: "connect",
-        label: "连接",
+        label: t("serverList.connect"),
         onSelect: () => void context.onConnectServer(id),
       });
     }
     items.push({
       id: "select",
-      label: "选择",
+      label: t("serverList.select"),
       onSelect: () => context.onSelectServer(id),
     });
     items.push({
       id: "delete",
-      label: "删除",
+      label: t("serverList.delete"),
       danger: true,
       onSelect: () => onDeleteServer(id),
     });
     return items;
-  }, [menu, context, onAddGroup, onAddServer, onDeleteGroup, onDeleteServer, onRenameGroup]);
+  }, [menu, context, onAddGroup, onAddServer, onDeleteGroup, onDeleteServer, onRenameGroup, t]);
 
   const canDrop = (item: DragItem, intent: DropIntent): boolean => {
     if (item.type === "group" && intent.kind === "into" && item.id === intent.groupId) {
@@ -315,7 +313,7 @@ export function ServerListWidget({
             "h-2 w-2 shrink-0 rounded-full",
             sessionStatusClass(status),
           )}
-          title={status ? SESSION_STATUS_LABEL[status] : undefined}
+          title={status ? t(`session.${status}`) : undefined}
         />
         <Server className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted-foreground)]" />
         <div className="min-w-0 flex-1">
@@ -323,7 +321,7 @@ export function ServerListWidget({
             <span className="truncate">{node.name}</span>
             {status && (
               <span className="shrink-0 text-[10px] text-[var(--color-muted-foreground)]">
-                {SESSION_STATUS_LABEL[status]}
+                {t(`session.${status}`)}
               </span>
             )}
           </div>
@@ -349,17 +347,17 @@ export function ServerListWidget({
       >
         {loading && (
           <p className="px-2 py-1 text-sm text-[var(--color-muted-foreground)]">
-            加载中...
+            {t("serverList.loading")}
           </p>
         )}
         {!loading && counts.servers === 0 && counts.groups === 0 && (
           <p className="px-2 py-1 text-sm text-[var(--color-muted-foreground)]">
-            还没有服务器，右键可添加。
+            {t("serverList.empty")}
           </p>
         )}
         {moving && (
           <p className="mb-1 px-2 text-xs text-[var(--color-muted-foreground)]">
-            正在更新顺序...
+            {t("serverList.moving")}
           </p>
         )}
 
@@ -458,7 +456,7 @@ export function ServerListWidget({
                       })
                     }
                     onDragEnd={handleDragEnd}
-                    aria-label="拖拽排序"
+                    aria-label={t("serverList.dragSort")}
                   >
                     <GripVertical className="h-3.5 w-3.5" />
                   </button>
@@ -468,7 +466,7 @@ export function ServerListWidget({
                       type="button"
                       className="widget-no-drag inline-flex h-6 w-5 shrink-0 items-center justify-center text-[var(--color-muted-foreground)]"
                       onClick={() => toggleExpanded(node.id)}
-                      aria-label={isOpen ? "收起" : "展开"}
+                      aria-label={isOpen ? t("serverList.collapse") : t("serverList.expand")}
                     >
                       {isOpen ? (
                         <ChevronDown className="h-3.5 w-3.5" />
@@ -520,7 +518,7 @@ export function ServerListWidget({
                 void handleDrop(event, intent);
               }}
             >
-              拖到此处移至根目录
+              {t("serverList.dropToRoot")}
             </div>
           )}
         </div>

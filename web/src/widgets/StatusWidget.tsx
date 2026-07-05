@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { api, type Server, type TreeNode } from "@/lib/api";
 import {
   computeNetRates,
@@ -10,14 +11,9 @@ import {
   formatLoad,
   type ServerStatusMetrics,
 } from "@/lib/server-status";
-import {
-  isSessionAlive,
-  SESSION_STATUS_LABEL,
-  type ServerSession,
-} from "@/lib/sessions";
+import { isSessionAlive, type ServerSession } from "@/lib/sessions";
 import {
   BANDWIDTH_HISTORY_MS,
-  formatPollIntervalLabel,
   getBandwidthMaxSlots,
 } from "@/lib/status-widget-config";
 import { cn } from "@/lib/utils";
@@ -40,6 +36,17 @@ function findServer(tree: TreeNode[], serverId: string): Server | null {
     }
   }
   return null;
+}
+
+function formatPollIntervalLabel(
+  pollIntervalMs: number,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const count =
+    pollIntervalMs % 1000 === 0
+      ? pollIntervalMs / 1000
+      : Number((pollIntervalMs / 1000).toFixed(1));
+  return t("common.seconds", { count });
 }
 
 function MetricBar({
@@ -125,6 +132,7 @@ function BandwidthChart({
   maxSlots: number;
   pollIntervalMs: number;
 }) {
+  const t = useT();
   const historyRxMax = Math.max(...history.map((sample) => sample.rx), 0);
   const historyTxMax = Math.max(...history.map((sample) => sample.tx), 0);
   const rxScaleMax = historyRxMax > 0 ? historyRxMax : 1;
@@ -135,14 +143,16 @@ function BandwidthChart({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[11px]">
-        <span className="text-[var(--color-muted-foreground)]">带宽</span>
+        <span className="text-[var(--color-muted-foreground)]">
+          {t("status.bandwidth")}
+        </span>
         <span>
           ↓ {formatBitrate(rxRate)} · ↑ {formatBitrate(txRate)}
         </span>
       </div>
 
       <MetricBar
-        label="下载"
+        label={t("status.download")}
         value={
           rxRate !== null && rxScaleMax > 0
             ? Math.min(100, (rxRate / rxScaleMax) * 100)
@@ -152,7 +162,7 @@ function BandwidthChart({
         barClassName="bg-sky-400"
       />
       <MetricBar
-        label="上传"
+        label={t("status.upload")}
         value={
           txRate !== null && txScaleMax > 0
             ? Math.min(100, (txRate / txScaleMax) * 100)
@@ -165,13 +175,19 @@ function BandwidthChart({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--color-muted-foreground)]">
           <span>
-            近 {historyMinutes} 分钟 · 每 {formatPollIntervalLabel(pollIntervalMs)} ·{" "}
-            {history.length}/{maxSlots} 次采样
+            {t("status.history", {
+              minutes: historyMinutes,
+              interval: formatPollIntervalLabel(pollIntervalMs, t),
+              current: history.length,
+              max: maxSlots,
+            })}
           </span>
           {history.length > 0 && (
             <span className="truncate text-right">
-              峰值 ↓ {formatBitrate(historyRxMax || null)} · ↑{" "}
-              {formatBitrate(historyTxMax || null)}
+              {t("status.peak", {
+                rx: formatBitrate(historyRxMax || null),
+                tx: formatBitrate(historyTxMax || null),
+              })}
             </span>
           )}
         </div>
@@ -189,14 +205,20 @@ function BandwidthChart({
                       style={{
                         height: `${barHeightPx(sample.rx, rxScaleMax)}px`,
                       }}
-                      title={`${new Date(sample.at).toLocaleTimeString()} 下载 ${formatBitrate(sample.rx)}`}
+                      title={t("status.sampleDownload", {
+                        time: new Date(sample.at).toLocaleTimeString(),
+                        rate: formatBitrate(sample.rx),
+                      })}
                     />
                     <div
                       className="w-1/2 bg-emerald-400/90 transition-all"
                       style={{
                         height: `${barHeightPx(sample.tx, txScaleMax)}px`,
                       }}
-                      title={`${new Date(sample.at).toLocaleTimeString()} 上传 ${formatBitrate(sample.tx)}`}
+                      title={t("status.sampleUpload", {
+                        time: new Date(sample.at).toLocaleTimeString(),
+                        rate: formatBitrate(sample.tx),
+                      })}
                     />
                   </>
                 ) : (
@@ -210,12 +232,12 @@ function BandwidthChart({
           </div>
         </div>
         <div className="flex justify-between text-[10px] text-[var(--color-muted-foreground)]">
-          <span>{historyMinutes} 分钟前</span>
-          <span>现在</span>
+          <span>{t("common.minutesAgo", { count: historyMinutes })}</span>
+          <span>{t("common.now")}</span>
         </div>
         <div className="flex justify-between text-[10px] text-[var(--color-muted-foreground)]">
-          <span>↓ 下载</span>
-          <span>↑ 上传</span>
+          <span>↓ {t("status.download")}</span>
+          <span>↑ {t("status.upload")}</span>
         </div>
       </div>
     </div>
@@ -228,6 +250,7 @@ export function StatusWidget({
   tree,
   pollIntervalMs,
 }: StatusWidgetProps) {
+  const t = useT();
   const session = activeServerId ? sessions[activeServerId] : null;
   const server = activeServerId ? findServer(tree, activeServerId) : null;
   const mountedRef = useRef(true);
@@ -295,11 +318,11 @@ export function StatusWidget({
       }
     } catch (err) {
       if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : "获取状态失败");
+      setError(err instanceof Error ? err.message : t("status.collectFailed"));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [session?.sessionId, session?.status]);
+  }, [session?.sessionId, session?.status, t]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -327,7 +350,7 @@ export function StatusWidget({
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-sm text-[var(--color-muted-foreground)]">
-        选择或连接服务器以查看状态
+        {t("status.selectServer")}
       </div>
     );
   }
@@ -337,13 +360,16 @@ export function StatusWidget({
       <div className="flex items-start justify-between gap-2 border-b border-[var(--color-border)] p-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">
-            {server?.name ?? "未知服务器"}
+            {server?.name ?? t("common.unknownServer")}
           </div>
           <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
             {server ? `${server.username}@${server.host}:${server.port}` : "-"}
           </div>
           <div className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
-            会话：{SESSION_STATUS_LABEL[session.status] ?? session.status}
+            {t("status.sessionStatus", {
+              label: t("session.label"),
+              status: t(`session.${session.status}`),
+            })}
           </div>
         </div>
         <Button
@@ -351,7 +377,7 @@ export function StatusWidget({
           variant="secondary"
           disabled={loading || !isSessionAlive(session.status)}
           onClick={() => void fetchStatus()}
-          title="刷新"
+          title={t("common.refresh")}
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
         </Button>
@@ -359,7 +385,7 @@ export function StatusWidget({
 
       {!isSessionAlive(session.status) && (
         <div className="flex flex-1 items-center justify-center p-4 text-sm text-[var(--color-muted-foreground)]">
-          请先连接终端会话后再查看服务器状态
+          {t("status.connectFirst")}
         </div>
       )}
 
@@ -373,41 +399,54 @@ export function StatusWidget({
         <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
           <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
             <div className="bg-[var(--color-secondary)]/50 p-2">
-              <div className="text-[var(--color-muted-foreground)]">1 分钟</div>
+              <div className="text-[var(--color-muted-foreground)]">
+                {t("status.load1")}
+              </div>
               <div className="mt-1 text-sm">{formatLoad(metrics.load1)}</div>
             </div>
             <div className="bg-[var(--color-secondary)]/50 p-2">
-              <div className="text-[var(--color-muted-foreground)]">5 分钟</div>
+              <div className="text-[var(--color-muted-foreground)]">
+                {t("status.load5")}
+              </div>
               <div className="mt-1 text-sm">{formatLoad(metrics.load5)}</div>
             </div>
             <div className="bg-[var(--color-secondary)]/50 p-2">
-              <div className="text-[var(--color-muted-foreground)]">15 分钟</div>
+              <div className="text-[var(--color-muted-foreground)]">
+                {t("status.load15")}
+              </div>
               <div className="mt-1 text-sm">{formatLoad(metrics.load15)}</div>
             </div>
           </div>
 
           <MetricBar
-            label="内存"
+            label={t("status.memory")}
             value={metrics.memoryUsedPercent}
             detail={
               metrics.memoryTotal !== null
                 ? metrics.memoryUsedPercent !== null
-                  ? `${metrics.memoryUsedPercent}% · ${formatBytes(
-                      metrics.memoryAvailable,
-                    )} 可用 / ${formatBytes(metrics.memoryTotal)}`
-                  : `${formatBytes(metrics.memoryAvailable)} 可用 / ${formatBytes(metrics.memoryTotal)}`
+                  ? t("status.availablePercent", {
+                      percent: metrics.memoryUsedPercent,
+                      available: formatBytes(metrics.memoryAvailable),
+                      total: formatBytes(metrics.memoryTotal),
+                    })
+                  : t("status.available", {
+                      available: formatBytes(metrics.memoryAvailable),
+                      total: formatBytes(metrics.memoryTotal),
+                    })
                 : "-"
             }
           />
 
           <MetricBar
-            label="磁盘 /"
+            label={t("status.disk")}
             value={metrics.diskUsedPercent}
             detail={
               metrics.diskUsedPercent !== null
-                ? `${metrics.diskUsedPercent}% · ${formatBytes(
-                    metrics.diskAvailable,
-                  )} 可用 / ${formatBytes(metrics.diskTotal)}`
+                ? t("status.availablePercent", {
+                    percent: metrics.diskUsedPercent,
+                    available: formatBytes(metrics.diskAvailable),
+                    total: formatBytes(metrics.diskTotal),
+                  })
                 : "-"
             }
           />
@@ -422,11 +461,15 @@ export function StatusWidget({
 
           <div className="grid grid-cols-1 gap-2 text-[11px]">
             <div className="flex justify-between gap-3">
-              <span className="text-[var(--color-muted-foreground)]">运行时间</span>
+              <span className="text-[var(--color-muted-foreground)]">
+                {t("status.uptime")}
+              </span>
               <span>{formatDuration(metrics.uptimeSeconds)}</span>
             </div>
             <div className="flex justify-between gap-3">
-              <span className="text-[var(--color-muted-foreground)]">系统</span>
+              <span className="text-[var(--color-muted-foreground)]">
+                {t("status.system")}
+              </span>
               <span className="truncate text-right">{metrics.osInfo ?? "-"}</span>
             </div>
           </div>
@@ -435,14 +478,19 @@ export function StatusWidget({
 
       {isSessionAlive(session.status) && loading && !metrics && !error && (
         <div className="flex flex-1 items-center justify-center p-4 text-sm text-[var(--color-muted-foreground)]">
-          正在采集状态...
+          {t("status.collecting")}
         </div>
       )}
 
       <div className="border-t border-[var(--color-border)] px-3 py-1.5 text-[11px] text-[var(--color-muted-foreground)]">
         {updatedAt
-          ? `更新于 ${new Date(updatedAt).toLocaleTimeString()} · 采样 ${formatPollIntervalLabel(pollIntervalMs)}`
-          : `等待数据 · 采样 ${formatPollIntervalLabel(pollIntervalMs)}`}
+          ? t("status.updatedAt", {
+              time: new Date(updatedAt).toLocaleTimeString(),
+              interval: formatPollIntervalLabel(pollIntervalMs, t),
+            })
+          : t("status.waiting", {
+              interval: formatPollIntervalLabel(pollIntervalMs, t),
+            })}
       </div>
     </div>
   );

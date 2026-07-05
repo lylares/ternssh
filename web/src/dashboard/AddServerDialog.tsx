@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 
 interface AddServerDialogProps {
@@ -17,6 +18,7 @@ export function AddServerDialog({
   groupId = null,
   onCreated,
 }: AddServerDialogProps) {
+  const t = useT();
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("22");
@@ -57,7 +59,7 @@ export function AddServerDialog({
       reset();
       await onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建失败");
+      setError(err instanceof Error ? err.message : t("addServer.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -67,15 +69,15 @@ export function AddServerDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg bg-[var(--color-card)] p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">添加服务器</h2>
+          <h2 className="text-lg font-semibold">{t("addServer.title")}</h2>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            关闭
+            {t("common.close")}
           </Button>
         </div>
 
         <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-2">
-            <Label htmlFor="name">名称</Label>
+            <Label htmlFor="name">{t("common.name")}</Label>
             <Input
               id="name"
               value={name}
@@ -85,7 +87,7 @@ export function AddServerDialog({
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 grid gap-2">
-              <Label htmlFor="host">主机</Label>
+              <Label htmlFor="host">{t("addServer.host")}</Label>
               <Input
                 id="host"
                 value={host}
@@ -94,7 +96,7 @@ export function AddServerDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="port">端口</Label>
+              <Label htmlFor="port">{t("addServer.port")}</Label>
               <Input
                 id="port"
                 value={port}
@@ -104,7 +106,7 @@ export function AddServerDialog({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="username">用户名</Label>
+            <Label htmlFor="username">{t("addServer.username")}</Label>
             <Input
               id="username"
               value={username}
@@ -113,7 +115,7 @@ export function AddServerDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="authType">认证方式</Label>
+            <Label htmlFor="authType">{t("addServer.authType")}</Label>
             <select
               id="authType"
               className="flex h-9 w-full bg-[var(--color-secondary)] px-3 text-sm"
@@ -122,13 +124,15 @@ export function AddServerDialog({
                 setAuthType(event.target.value as "password" | "private_key")
               }
             >
-              <option value="password">密码</option>
-              <option value="private_key">私钥</option>
+              <option value="password">{t("addServer.password")}</option>
+              <option value="private_key">{t("addServer.privateKey")}</option>
             </select>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="credential">
-              {authType === "password" ? "密码" : "私钥内容"}
+              {authType === "password"
+                ? t("addServer.password")
+                : t("addServer.privateKeyContent")}
             </Label>
             {authType === "password" ? (
               <Input
@@ -153,10 +157,10 @@ export function AddServerDialog({
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "保存中..." : "保存"}
+              {submitting ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </form>

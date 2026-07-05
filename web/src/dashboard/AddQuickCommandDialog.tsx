@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useT } from "@/i18n";
 import {
   parseQuickCommandsConfig,
   serializeQuickCommandsConfig,
@@ -21,6 +22,7 @@ export function AddQuickCommandDialog({
   configJson,
   onAdded,
 }: AddQuickCommandDialogProps) {
+  const t = useT();
   const [label, setLabel] = useState("");
   const [command, setCommand] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function AddQuickCommandDialog({
     const nextLabel = label.trim();
     const nextCommand = command.replace(/\r\n/g, "\n").trim();
     if (!nextLabel || !nextCommand) {
-      setError("请填写命令名称和内容");
+      setError(t("quickCommands.fillRequired"));
       return;
     }
 
@@ -64,18 +66,18 @@ export function AddQuickCommandDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md bg-[var(--color-card)] p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">添加快捷命令</h2>
+          <h2 className="text-lg font-semibold">{t("quickCommands.addTitle")}</h2>
           <Button variant="ghost" onClick={handleClose}>
-            关闭
+            {t("common.close")}
           </Button>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="quickCommandLabel">名称</Label>
+            <Label htmlFor="quickCommandLabel">{t("common.name")}</Label>
             <Input
               id="quickCommandLabel"
-              placeholder="例如：重启 nginx"
+              placeholder={t("quickCommands.labelPlaceholder")}
               required
               value={label}
               onChange={(event) => setLabel(event.target.value)}
@@ -83,10 +85,10 @@ export function AddQuickCommandDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="quickCommandText">命令</Label>
+            <Label htmlFor="quickCommandText">{t("quickCommands.command")}</Label>
             <Textarea
               id="quickCommandText"
-              placeholder={"例如：systemctl restart nginx\n或输入多行脚本"}
+              placeholder={t("quickCommands.commandPlaceholder")}
               required
               rows={6}
               value={command}
@@ -99,7 +101,7 @@ export function AddQuickCommandDialog({
               }}
             />
             <p className="text-[11px] text-[var(--color-muted-foreground)]">
-              支持多行命令，Ctrl+Enter 或 ⌘+Enter 保存
+              {t("quickCommands.multilineHint")}
             </p>
           </div>
 
@@ -107,9 +109,9 @@ export function AddQuickCommandDialog({
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={handleClose}>
-              取消
+              {t("common.cancel")}
             </Button>
-            <Button type="submit">保存</Button>
+            <Button type="submit">{t("common.save")}</Button>
           </div>
         </form>
       </div>

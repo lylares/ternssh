@@ -15,6 +15,7 @@ import {
   type GridItem,
   type GridMetrics,
 } from "./grid-utils";
+import { useT } from "@/i18n";
 
 interface GridDashboardProps {
   layout: GridItem[];
@@ -70,6 +71,7 @@ export function GridDashboard({
   renderHandleActions,
   renderItem,
 }: GridDashboardProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [interaction, setInteraction] = useState<Interaction>({ kind: "idle" });
@@ -292,7 +294,7 @@ export function GridDashboard({
               <span
                 className="widget-drag-grip"
                 onPointerDown={(event) => startDrag(item, event)}
-                aria-label="拖拽移动"
+                aria-label={t("grid.dragMove")}
               />
               <span className="widget-drag-label">{getItemTitle(item)}</span>
               {renderHandleActions && (
@@ -307,7 +309,7 @@ export function GridDashboard({
             <div className="widget-body">{renderItem(item)}</div>
             <div
               className="widget-resize-handle widget-no-drag"
-              title="拖拽缩放"
+              title={t("grid.dragResize")}
               onPointerDown={(event) => startResize(item, event)}
             />
           </div>

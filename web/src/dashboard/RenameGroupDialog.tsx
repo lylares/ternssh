@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 
 interface RenameGroupDialogProps {
@@ -19,6 +20,7 @@ export function RenameGroupDialog({
   onOpenChange,
   onRenamed,
 }: RenameGroupDialogProps) {
+  const t = useT();
   const [name, setName] = useState(initialName);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,9 @@ export function RenameGroupDialog({
       onOpenChange(false);
       await onRenamed();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "重命名失败");
+      setError(
+        err instanceof Error ? err.message : t("renameGroup.createFailed"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -48,15 +52,15 @@ export function RenameGroupDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md bg-[var(--color-card)] p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">重命名分组</h2>
+          <h2 className="text-lg font-semibold">{t("renameGroup.title")}</h2>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            关闭
+            {t("common.close")}
           </Button>
         </div>
 
         <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-2">
-            <Label htmlFor="renameGroup">分组名称</Label>
+            <Label htmlFor="renameGroup">{t("renameGroup.name")}</Label>
             <Input
               id="renameGroup"
               value={name}
@@ -74,10 +78,10 @@ export function RenameGroupDialog({
               variant="secondary"
               onClick={() => onOpenChange(false)}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "保存中..." : "保存"}
+              {submitting ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </form>

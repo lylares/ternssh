@@ -13,11 +13,8 @@ import {
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  isSessionAlive,
-  SESSION_STATUS_LABEL,
-  type ServerSession,
-} from "@/lib/sessions";
+import { useT } from "@/i18n";
+import { isSessionAlive, type ServerSession } from "@/lib/sessions";
 import {
   collectDroppedFiles,
   joinRemotePath,
@@ -83,6 +80,7 @@ export function FileManagerWidget({
   activeServerId,
   sessions,
 }: FileManagerWidgetProps) {
+  const t = useT();
   const session = activeServerId ? sessions[activeServerId] : null;
   const clientRef = useRef<SftpClient | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -135,11 +133,11 @@ export function FileManagerWidget({
       setSelectedName(null);
     } catch (err) {
       if (!isActive()) return;
-      setError(err instanceof Error ? err.message : "读取目录失败");
+      setError(err instanceof Error ? err.message : t("fileManager.readDirFailed"));
     } finally {
       if (isActive()) setLoading(false);
     }
-  }, [isActive]);
+  }, [isActive, t]);
 
   useEffect(() => {
     if (!session || session.status !== "open") {
@@ -183,7 +181,7 @@ export function FileManagerWidget({
           return;
         } catch (err) {
           if (cancelled || !isActive()) return;
-          const message = err instanceof Error ? err.message : "SFTP 连接失败";
+          const message = err instanceof Error ? err.message : t("fileManager.sftpConnectFailed");
           const retryable =
             message.includes("未就绪") ||
             message.includes("请先连接") ||
@@ -216,7 +214,7 @@ export function FileManagerWidget({
     session?.status,
     session?.sftpWsUrl,
     disconnectClient,
-    isActive,
+    t,
   ]);
 
   const navigateTo = (nextPath: string) => {
@@ -234,7 +232,7 @@ export function FileManagerWidget({
   const handleMkdir = async () => {
     if (!isActive() || !ready || !clientRef.current) return;
 
-    const name = window.prompt("新建文件夹名称");
+    const name = window.prompt(t("fileManager.newFolderPrompt"));
     if (!name?.trim()) return;
 
     setLoading(true);
@@ -245,7 +243,7 @@ export function FileManagerWidget({
       await loadDirectory(remotePath);
     } catch (err) {
       if (!isActive()) return;
-      setError(err instanceof Error ? err.message : "创建目录失败");
+      setError(err instanceof Error ? err.message : t("fileManager.mkdirFailed"));
       setLoading(false);
     }
   };
@@ -254,8 +252,14 @@ export function FileManagerWidget({
     if (!isActive() || !ready || !clientRef.current) return;
 
     const target = joinRemotePath(remotePath, entry.name);
-    const label = entry.isDir ? "文件夹" : "文件";
-    if (!window.confirm(`确定删除${label}「${entry.name}」？`)) return;
+    const kind = entry.isDir
+      ? t("fileManager.deleteFolder")
+      : t("fileManager.deleteFile");
+    if (
+      !window.confirm(t("fileManager.deleteConfirm", { kind, name: entry.name }))
+    ) {
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -266,7 +270,7 @@ export function FileManagerWidget({
       await loadDirectory(remotePath);
     } catch (err) {
       if (!isActive()) return;
-      setError(err instanceof Error ? err.message : "删除失败");
+      setError(err instanceof Error ? err.message : t("fileManager.deleteFailed"));
       setLoading(false);
     }
   };
@@ -321,7 +325,7 @@ export function FileManagerWidget({
         await loadDirectory(remotePath);
       } catch (err) {
         if (!isActive()) return;
-        setError(err instanceof Error ? err.message : "上传失败");
+        setError(err instanceof Error ? err.message : t("fileManager.uploadFailed"));
       } finally {
         if (isActive()) {
           setUploading(false);
@@ -329,7 +333,7 @@ export function FileManagerWidget({
         }
       }
     },
-    [isActive, ready, remotePath, loadDirectory],
+    [isActive, ready, remotePath, loadDirectory, t],
   );
 
   const handleDrop = useCallback(
@@ -381,28 +385,28 @@ export function FileManagerWidget({
       return [
         {
           id: "upload",
-          label: "上传文件",
+          label: t("fileManager.upload"),
           onSelect: () => fileInputRef.current?.click(),
         },
         {
           id: "mkdir",
-          label: "新建文件夹",
+          label: t("fileManager.newFolder"),
           onSelect: () => void handleMkdir(),
         },
         {
           id: "refresh",
-          label: "刷新",
+          label: t("common.refresh"),
           onSelect: () => void loadDirectory(remotePath),
         },
         {
           id: "up",
-          label: "上级目录",
+          label: t("fileManager.parent"),
           disabled: isRemoteRoot(remotePath),
           onSelect: () => navigateTo(parentRemotePath(remotePath)),
         },
         {
           id: "home",
-          label: "用户目录",
+          label: t("fileManager.home"),
           onSelect: () => navigateTo("."),
         },
       ];
@@ -414,25 +418,25 @@ export function FileManagerWidget({
     if (entry.isDir) {
       items.push({
         id: "open",
-        label: "打开",
+        label: t("common.open"),
         onSelect: () => navigateTo(joinRemotePath(remotePath, entry.name)),
       });
     }
 
     items.push({
       id: "delete",
-      label: "删除",
+      label: t("common.delete"),
       danger: true,
       onSelect: () => void handleDeleteEntry(entry),
     });
 
     return items;
-  }, [menu, loading, ready, remotePath, loadDirectory]);
+  }, [menu, loading, ready, remotePath, loadDirectory, t]);
 
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-sm text-[var(--color-muted-foreground)]">
-        选择或连接服务器以浏览远程文件
+        {t("fileManager.selectServer")}
       </div>
     );
   }
@@ -440,8 +444,8 @@ export function FileManagerWidget({
   if (!isSessionAlive(session.status)) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-sm text-[var(--color-muted-foreground)]">
-        <span>{SESSION_STATUS_LABEL[session.status] ?? session.status}</span>
-        <span>请先连接终端会话后再使用文件管理</span>
+        <span>{t(`session.${session.status}`)}</span>
+        <span>{t("fileManager.connectFirst")}</span>
       </div>
     );
   }
@@ -483,7 +487,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready}
           onClick={() => navigateTo(".")}
-          title="用户目录"
+          title={t("fileManager.home")}
         >
           <Home className="h-3.5 w-3.5" />
         </Button>
@@ -492,7 +496,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready || isRemoteRoot(remotePath)}
           onClick={() => navigateTo(parentRemotePath(remotePath))}
-          title="上级目录"
+          title={t("fileManager.parent")}
         >
           <ArrowUp className="h-3.5 w-3.5" />
         </Button>
@@ -501,7 +505,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready}
           onClick={() => void loadDirectory(remotePath)}
-          title="刷新"
+          title={t("common.refresh")}
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
         </Button>
@@ -510,7 +514,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready || uploading}
           onClick={() => fileInputRef.current?.click()}
-          title="上传文件"
+          title={t("fileManager.upload")}
         >
           <Upload className="h-3.5 w-3.5" />
         </Button>
@@ -519,7 +523,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready}
           onClick={() => void handleMkdir()}
-          title="新建文件夹"
+          title={t("fileManager.newFolder")}
         >
           <FolderPlus className="h-3.5 w-3.5" />
         </Button>
@@ -528,7 +532,7 @@ export function FileManagerWidget({
           variant="secondary"
           disabled={loading || !ready || !selectedName}
           onClick={() => void handleDelete()}
-          title="删除"
+          title={t("common.delete")}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -557,7 +561,9 @@ export function FileManagerWidget({
       {uploadState && (
         <div className="border-b border-[var(--color-border)] px-3 py-2">
           <div className="flex items-center justify-between gap-2 text-[11px]">
-            <span className="truncate">正在上传 {uploadState.name}</span>
+            <span className="truncate">
+              {t("fileManager.uploading", { name: uploadState.name })}
+            </span>
             <span className="shrink-0 text-[var(--color-muted-foreground)]">
               {formatUploadProgress(uploadState.loaded, uploadState.total)}
             </span>
@@ -580,10 +586,16 @@ export function FileManagerWidget({
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-[var(--color-card)] text-[var(--color-muted-foreground)]">
             <tr>
-              <th className="px-3 py-2 font-medium">名称</th>
-              <th className="hidden px-3 py-2 font-medium sm:table-cell">大小</th>
-              <th className="hidden px-3 py-2 font-medium md:table-cell">权限</th>
-              <th className="hidden px-3 py-2 font-medium lg:table-cell">修改时间</th>
+              <th className="px-3 py-2 font-medium">{t("fileManager.colName")}</th>
+              <th className="hidden px-3 py-2 font-medium sm:table-cell">
+                {t("fileManager.colSize")}
+              </th>
+              <th className="hidden px-3 py-2 font-medium md:table-cell">
+                {t("fileManager.colPerm")}
+              </th>
+              <th className="hidden px-3 py-2 font-medium lg:table-cell">
+                {t("fileManager.colModified")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -634,7 +646,7 @@ export function FileManagerWidget({
                   colSpan={4}
                   className="px-3 py-8 text-center text-[var(--color-muted-foreground)]"
                 >
-                  目录为空
+                  {t("fileManager.emptyDir")}
                 </td>
               </tr>
             )}
@@ -645,15 +657,18 @@ export function FileManagerWidget({
       <div className="border-t border-[var(--color-border)] px-3 py-1.5 text-[11px] text-[var(--color-muted-foreground)]">
         {ready
           ? uploading
-            ? `${remotePath} · 上传中`
-            : `${remotePath} · ${sortedEntries.length} 项 · 拖拽文件到此处上传`
-          : "正在连接 SFTP..."}
+            ? t("fileManager.uploadingStatus", { path: remotePath })
+            : t("fileManager.status", {
+                path: remotePath,
+                count: sortedEntries.length,
+              })
+          : t("fileManager.connecting")}
       </div>
 
       {dragActive && ready && !uploading && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-background)]/80">
           <div className="rounded-sm bg-[var(--color-card)] px-4 py-3 text-sm shadow-lg">
-            释放以上传到 {remotePath}
+            {t("fileManager.dropToUpload", { path: remotePath })}
           </div>
         </div>
       )}
