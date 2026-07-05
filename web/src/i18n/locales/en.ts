@@ -38,7 +38,8 @@ export const en: Messages = {
     langZh: "中文",
     langEn: "English",
     personalization: "Personalization",
-    personalizationHint: "Customize appearance, background, and widget styling",
+    personalizationHint:
+      "Customize appearance, background, widget styling, and layout spacing",
     background: "Background",
     backgroundHint: "Upload an image as the workspace background (max 2MB)",
     backgroundUpload: "Upload background",
@@ -48,6 +49,9 @@ export const en: Messages = {
     backgroundTooLarge: "Image must be smaller than {size}MB",
     widgetOpacity: "Widget opacity",
     widgetOpacityHint: "Lower values make widget backgrounds more transparent",
+    layoutSpacing: "Layout spacing",
+    layoutSpacingHint:
+      "Adjust gaps between dashboard widgets and the space below the header",
     terminalTheme: "Terminal theme",
     terminalThemeDefault: "Follow app theme",
     terminalThemeCustom: "Custom",

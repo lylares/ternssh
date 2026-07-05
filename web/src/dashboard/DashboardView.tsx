@@ -12,6 +12,7 @@ import {
 } from "@/lib/sessions";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { useI18n } from "@/i18n";
+import { usePersonalization } from "@/theme";
 import { parseStatusWidgetConfig } from "@/lib/status-widget-config";
 import { ServerListWidget } from "@/widgets/ServerListWidget";
 import { FileManagerWidget } from "@/widgets/FileManagerWidget";
@@ -71,6 +72,7 @@ function layoutToWidgets(
 
 export function DashboardView() {
   const { t } = useI18n();
+  const { gridMargin } = usePersonalization();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [layout, setLayout] = useState<GridItem[]>([]);
@@ -599,6 +601,7 @@ export function DashboardView() {
 
       <GridDashboard
         layout={layout}
+        margin={[gridMargin, gridMargin]}
         onLayoutChange={handleLayoutChange}
         getItemTitle={(item) => {
           const widget = widgetById.get(item.i);

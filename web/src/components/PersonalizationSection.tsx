@@ -1,4 +1,5 @@
 import { BackgroundUpload } from "@/components/BackgroundUpload";
+import { LayoutSpacingSlider } from "@/components/LayoutSpacingSlider";
 import { TerminalThemeSettings } from "@/components/TerminalThemeSettings";
 import { ThemeSelect } from "@/components/ThemeSelect";
 import { WidgetOpacitySlider } from "@/components/WidgetOpacitySlider";
@@ -20,6 +21,7 @@ export function PersonalizationSection() {
       <TerminalThemeSettings />
       <BackgroundUpload />
       <WidgetOpacitySlider />
+      <LayoutSpacingSlider />
     </section>
   );
 }

@@ -9,10 +9,13 @@ import {
 } from "react";
 import {
   applyBackgroundImage,
+  applyGridMargin,
   applyWidgetOpacity,
   BACKGROUND_STORAGE_KEY,
   getStoredBackgroundImage,
+  getStoredGridMargin,
   getStoredWidgetOpacity,
+  GRID_MARGIN_STORAGE_KEY,
   WIDGET_OPACITY_STORAGE_KEY,
 } from "./personalization";
 import {
@@ -41,6 +44,8 @@ interface PersonalizationContextValue {
   setBackgroundImage: (image: string | null) => void;
   widgetOpacity: number;
   setWidgetOpacity: (opacity: number) => void;
+  gridMargin: number;
+  setGridMargin: (margin: number) => void;
   terminalTheme: TerminalThemeConfig;
   resolvedTerminalColors: TerminalThemeColors;
   setTerminalThemeMode: (mode: TerminalThemeMode) => void;
@@ -70,6 +75,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [widgetOpacity, setWidgetOpacityState] = useState<number>(() =>
     getStoredWidgetOpacity(),
   );
+  const [gridMargin, setGridMarginState] = useState<number>(() =>
+    getStoredGridMargin(),
+  );
   const [terminalTheme, setTerminalThemeState] = useState<TerminalThemeConfig>(
     () => getStoredTerminalThemeConfig(),
   );
@@ -86,6 +94,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyWidgetOpacity(widgetOpacity);
   }, [widgetOpacity]);
+
+  useEffect(() => {
+    applyGridMargin(gridMargin);
+  }, [gridMargin]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
@@ -107,6 +119,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const clamped = applyWidgetOpacity(opacity);
     setWidgetOpacityState(clamped);
     localStorage.setItem(WIDGET_OPACITY_STORAGE_KEY, String(clamped));
+  }, []);
+
+  const setGridMargin = useCallback((margin: number) => {
+    const clamped = applyGridMargin(margin);
+    setGridMarginState(clamped);
+    localStorage.setItem(GRID_MARGIN_STORAGE_KEY, String(clamped));
   }, []);
 
   const setTerminalThemeMode = useCallback((next: TerminalThemeMode) => {
@@ -167,6 +185,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setBackgroundImage,
       widgetOpacity,
       setWidgetOpacity,
+      gridMargin,
+      setGridMargin,
       terminalTheme,
       resolvedTerminalColors,
       setTerminalThemeMode,
@@ -181,6 +201,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setBackgroundImage,
       widgetOpacity,
       setWidgetOpacity,
+      gridMargin,
+      setGridMargin,
       terminalTheme,
       resolvedTerminalColors,
       setTerminalThemeMode,
