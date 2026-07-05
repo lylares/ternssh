@@ -1,5 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { getCredentialValue, getServer } from "../db/servers";
+import {
+  parseStatusOutput,
+  STATUS_COMMAND,
+} from "../lib/server-status";
 import { SSHSession } from "../ssh/session";
 import type { SSHConnectionConfig } from "../ssh/types";
 
@@ -12,16 +16,14 @@ interface SessionRow {
 
 export class SshSession extends DurableObject<Env> {
   private sshSession: SSHSession | null = null;
+  private statusSession: SSHSession | null = null;
   private terminalWs: WebSocket | null = null;
   private sftpSockets = new Set<WebSocket>();
   private bootstrapping: Promise<void> | null = null;
+  private statusBootstrapping: Promise<void> | null = null;
+  private connectionConfig: SSHConnectionConfig | null = null;
 
   async fetch(request: Request): Promise<Response> {
-    const upgradeHeader = request.headers.get("Upgrade");
-    if (upgradeHeader?.toLowerCase() !== "websocket") {
-      return new Response("Expected WebSocket", { status: 426 });
-    }
-
     const parsed = parseRequestUrl(request.url);
     if (!parsed) {
       return new Response("Invalid session URL", { status: 400 });
@@ -35,6 +37,15 @@ export class SshSession extends DurableObject<Env> {
 
     if (!session) {
       return new Response("Session not found", { status: 404 });
+    }
+
+    if (parsed.channel === "status") {
+      return this.handleStatus(session);
+    }
+
+    const upgradeHeader = request.headers.get("Upgrade");
+    if (upgradeHeader?.toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket", { status: 426 });
     }
 
     const pair = new WebSocketPair();
@@ -114,6 +125,8 @@ export class SshSession extends DurableObject<Env> {
       this.sshSession?.close();
       this.sshSession = null;
       this.bootstrapping = null;
+      this.closeStatusSession();
+      this.connectionConfig = null;
       for (const sftpWs of this.sftpSockets) {
         try {
           sftpWs.close(1000, "Terminal session closed");
@@ -123,6 +136,155 @@ export class SshSession extends DurableObject<Env> {
       }
       this.sftpSockets.clear();
     }
+  }
+
+  private async handleStatus(session: SessionRow): Promise<Response> {
+    const deadline = Date.now() + 30_000;
+
+    while (Date.now() < deadline) {
+      if (this.bootstrapping) {
+        try {
+          await this.bootstrapping;
+        } catch {
+          break;
+        }
+      }
+
+      if (this.sshSession?.isSSHReady()) {
+        try {
+          const config = await this.resolveConnectionConfig(session);
+          if (!config) {
+            return Response.json({ error: "服务器配置不存在" }, { status: 404 });
+          }
+
+          await this.ensureStatusSession(config);
+
+          const result = await this.statusSession!.execCommand(STATUS_COMMAND);
+          const metrics = parseStatusOutput(result.stdout);
+          return Response.json({
+            serverId: session.server_id,
+            collectedAt: new Date().toISOString(),
+            metrics,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Status collection failed";
+          return Response.json({ error: message }, { status: 500 });
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    return Response.json(
+      {
+        error: this.sshSession
+          ? "SSH 连接未就绪，请稍后重试"
+          : "请先连接终端会话",
+      },
+      { status: 503 },
+    );
+  }
+
+  private async resolveConnectionConfig(
+    session: SessionRow,
+  ): Promise<SSHConnectionConfig | null> {
+    if (this.connectionConfig) {
+      return this.connectionConfig;
+    }
+
+    const serverRecord = await getServer(
+      this.env.DB,
+      session.user_id,
+      session.server_id,
+    );
+    if (!serverRecord) return null;
+
+    const credential = await getCredentialValue(
+      this.env.DB,
+      session.user_id,
+      serverRecord.credential_ref,
+    );
+    if (!credential) return null;
+
+    this.connectionConfig = {
+      host: serverRecord.host,
+      port: serverRecord.port,
+      username: serverRecord.username,
+      password: serverRecord.auth_type === "password" ? credential : "",
+      authMethod:
+        serverRecord.auth_type === "private_key" ? "publickey" : "password",
+      privateKey:
+        serverRecord.auth_type === "private_key" ? credential : undefined,
+      cols: 120,
+      rows: 40,
+    };
+    return this.connectionConfig;
+  }
+
+  private closeStatusSession(): void {
+    this.statusSession?.close();
+    this.statusSession = null;
+    this.statusBootstrapping = null;
+  }
+
+  private async ensureStatusSession(
+    config: SSHConnectionConfig,
+  ): Promise<void> {
+    if (this.statusSession?.isSSHReady()) return;
+
+    if (this.statusBootstrapping) {
+      await this.statusBootstrapping;
+      await this.waitForStatusReady(30_000);
+      return;
+    }
+
+    this.closeStatusSession();
+
+    this.statusBootstrapping = (async () => {
+      const { connect } = await import("cloudflare:sockets");
+      const hostname = config.host.includes(":")
+        ? `[${config.host}]`
+        : config.host;
+      const socket = connect({ hostname, port: config.port });
+      await socket.opened;
+
+      const noopWs = {
+        send: () => {},
+        close: () => {},
+      } as unknown as WebSocket;
+
+      const session = new SSHSession(
+        noopWs,
+        socket,
+        config,
+        false,
+        false,
+        undefined,
+        true,
+      );
+      this.statusSession = session;
+      // Dedicated exec-only SSH connection: no PTY, no terminal shell, no history.
+      await session.startHandshake();
+      await this.waitForStatusReady(30_000);
+    })();
+
+    try {
+      await this.statusBootstrapping;
+    } finally {
+      this.statusBootstrapping = null;
+    }
+  }
+
+  private async waitForStatusReady(timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if (this.statusSession?.isSSHReady()) return;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    throw new Error("状态采集连接未就绪");
   }
 
   private async startTerminal(
@@ -135,6 +297,7 @@ export class SshSession extends DurableObject<Env> {
       this.sshSession.close();
       this.sshSession = null;
     }
+    this.closeStatusSession();
 
     try {
       await this.ensureSshSession(ws, config);
@@ -210,6 +373,7 @@ export class SshSession extends DurableObject<Env> {
       const socket = connect({ hostname, port: config.port });
       await socket.opened;
 
+      this.connectionConfig = config;
       const session = new SSHSession(ws, socket, config, false, false);
       this.sshSession = session;
       await session.startHandshake();
@@ -222,8 +386,12 @@ export class SshSession extends DurableObject<Env> {
 
 function parseRequestUrl(
   url: string,
-): { sessionId: string; channel: "terminal" | "sftp" } | null {
+): { sessionId: string; channel: "terminal" | "sftp" | "status" } | null {
   const pathname = new URL(url).pathname;
+  const statusMatch = pathname.match(/\/sessions\/([^/]+)\/status$/);
+  if (statusMatch?.[1]) {
+    return { sessionId: statusMatch[1], channel: "status" };
+  }
   const sftpMatch = pathname.match(/\/sessions\/([^/]+)\/sftp\/ws$/);
   if (sftpMatch?.[1]) {
     return { sessionId: sftpMatch[1], channel: "sftp" };

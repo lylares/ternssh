@@ -261,10 +261,21 @@ export function joinRemotePath(base: string, name: string): string {
 
 export function parentRemotePath(path: string): string {
   if (path === "." || path === "/") return path;
+
+  const isAbsolute = path.startsWith("/");
   const parts = path.split("/").filter(Boolean);
   parts.pop();
-  if (parts.length === 0) return ".";
-  return parts.join("/");
+
+  if (parts.length === 0) {
+    return isAbsolute ? "/" : ".";
+  }
+
+  const joined = parts.join("/");
+  return isAbsolute ? `/${joined}` : joined;
+}
+
+export function isRemoteRoot(path: string): boolean {
+  return path === "." || path === "/";
 }
 
 export function sortSftpEntries(entries: SftpEntry[]): SftpEntry[] {

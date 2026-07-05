@@ -11,6 +11,7 @@ import {
 } from "@/lib/sessions";
 import { ServerListWidget } from "@/widgets/ServerListWidget";
 import { FileManagerWidget } from "@/widgets/FileManagerWidget";
+import { StatusWidget } from "@/widgets/StatusWidget";
 import { TerminalWidget } from "@/widgets/TerminalWidget";
 import type { WidgetContext } from "@/widgets/types";
 import { AddGroupDialog } from "./AddGroupDialog";
@@ -458,7 +459,7 @@ export function DashboardView() {
             return <Badge>{terminalBadge}</Badge>;
           }
 
-          if (widget.type === "file_manager") {
+          if (widget.type === "file_manager" || widget.type === "status") {
             return (
               <Button
                 className="widget-no-drag"
@@ -521,6 +522,16 @@ export function DashboardView() {
               <FileManagerWidget
                 activeServerId={activeServerId}
                 sessions={sessions}
+              />
+            );
+          }
+
+          if (widget.type === "status") {
+            return (
+              <StatusWidget
+                activeServerId={activeServerId}
+                sessions={sessions}
+                tree={tree}
               />
             );
           }

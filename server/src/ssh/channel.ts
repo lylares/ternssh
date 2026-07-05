@@ -11,6 +11,7 @@ import { encodeString, readUint32, writeUint32 } from './utils';
 const SESSION_FIELD = encodeString('session');
 const PTY_REQ_FIELD = encodeString('pty-req');
 const SHELL_FIELD = encodeString('shell');
+const EXEC_FIELD = encodeString('exec');
 const SUBSYSTEM_FIELD = encodeString('subsystem');
 const XTERM_256COLOR_FIELD = encodeString('xterm-256color');
 const WINDOW_CHANGE_FIELD = encodeString('window-change');
@@ -110,6 +111,21 @@ export class SSHChannel {
     offset += 4;
     offset = writeBytes(payload, offset, SHELL_FIELD);
     payload[offset] = 0x01;
+    return payload;
+  }
+
+  buildExecRequest(command: string): Uint8Array {
+    const commandField = encodeString(command);
+    const payload = new Uint8Array(
+      1 + 4 + EXEC_FIELD.length + 1 + commandField.length,
+    );
+    let offset = 0;
+    payload[offset++] = SSH_MSG_CHANNEL_REQUEST;
+    writeUint32(payload, offset, this.remoteChannelID);
+    offset += 4;
+    offset = writeBytes(payload, offset, EXEC_FIELD);
+    payload[offset++] = 0x01;
+    writeBytes(payload, offset, commandField);
     return payload;
   }
 

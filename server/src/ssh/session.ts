@@ -19,6 +19,7 @@ import {
   SSH_MSG_CHANNEL_WINDOW_ADJUST,
   SSH_MSG_CHANNEL_EOF,
   SSH_MSG_CHANNEL_CLOSE,
+  SSH_MSG_CHANNEL_REQUEST,
   SSH_MSG_DISCONNECT,
   SSH_MSG_IGNORE,
   SSH_MSG_DEBUG,
@@ -45,6 +46,21 @@ import { SSHAESCTRCipher, SSHAESGCMCipher, SSHHMAC } from './crypto';
 import { SSHAuth } from './auth';
 import { SSHChannel, type ChannelDataChunk } from './channel';
 import { SFTPHandler } from './sftp-handler';
+import { readUint32 } from './utils';
+import type { ExecResult } from '../lib/server-status';
+
+interface PendingExec {
+  channelID: number;
+  channel: SSHChannel;
+  command: string;
+  stdout: Uint8Array[];
+  stderr: Uint8Array[];
+  execSent: boolean;
+  finished: boolean;
+  resolve: (result: ExecResult) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 const LOCAL_WINDOW_ADJUST_THRESHOLD = 512 * 1024;
 const KEEPALIVE_REQUEST_NAME = new TextEncoder().encode('keepalive@openssh.com');
@@ -65,6 +81,9 @@ export class SSHSession {
   private shellChannel: SSHChannel;
   private nextChannelID: number = 1; // Start from 1, shellChannel uses 0
   private sftpHandler: SFTPHandler | null = null;
+  private pendingExec: PendingExec | null = null;
+  private execChain: Promise<void> = Promise.resolve();
+  private readonly execOnly: boolean;
   private sftpTaskQueue: Promise<void> = Promise.resolve();
   private encryptCipher: SSHAESGCMCipher | SSHAESCTRCipher | null = null;
   private decryptCipher: SSHAESGCMCipher | SSHAESCTRCipher | null = null;
@@ -114,7 +133,8 @@ export class SSHSession {
     config: SSHConnectionConfig,
     strictHostKeyVerify: boolean = true,
     debugMode: boolean = false,
-    sftpAttachUrl?: string
+    sftpAttachUrl?: string,
+    execOnly: boolean = false,
   ) {
     this.ws = ws;
     this.socket = socket;
@@ -122,6 +142,7 @@ export class SSHSession {
     this.strictHostKeyVerify = strictHostKeyVerify;
     this.debugMode = debugMode;
     this.sftpAttachUrl = sftpAttachUrl;
+    this.execOnly = execOnly;
 
     this.transport = new SSHTransport();
     this.packetParser = new SSHPacketParser();
@@ -159,6 +180,105 @@ export class SSHSession {
 
   isSSHReady(): boolean {
     return this.state === 'ready';
+  }
+
+  async execCommand(command: string, timeoutMs = 15000): Promise<ExecResult> {
+    if (!this.execOnly) {
+      throw new Error('此会话不支持远程命令执行');
+    }
+
+    const run = () => this.runExecViaChannel(command, timeoutMs);
+    const result = this.execChain.then(run);
+    this.execChain = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
+
+  private runExecViaChannel(command: string, timeoutMs: number): Promise<ExecResult> {
+    if (this.state !== 'ready') {
+      return Promise.reject(new Error('SSH 连接未就绪'));
+    }
+    if (this.pendingExec) {
+      return Promise.reject(new Error('已有命令正在执行'));
+    }
+
+    return new Promise<ExecResult>((resolve, reject) => {
+      const channelID = this.nextChannelID++;
+      const channel = new SSHChannel();
+      this.channels.set(channelID, channel);
+      const timer = setTimeout(() => {
+        this.failExec(new Error('命令执行超时'));
+      }, timeoutMs);
+
+      this.pendingExec = {
+        channelID,
+        channel,
+        command,
+        stdout: [],
+        stderr: [],
+        execSent: false,
+        finished: false,
+        resolve,
+        reject,
+        timer,
+      };
+
+      void this.sendEncrypted(channel.buildOpenSession(channelID)).catch((error) => {
+        this.failExec(error instanceof Error ? error : new Error(String(error)));
+      });
+    });
+  }
+
+  private concatChunks(chunks: Uint8Array[]): Uint8Array {
+    const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result;
+  }
+
+  private finalizeExec(exitCode: number): void {
+    const pending = this.pendingExec;
+    if (!pending || pending.finished) return;
+
+    pending.finished = true;
+    clearTimeout(pending.timer);
+    this.channels.delete(pending.channelID);
+    this.pendingExec = null;
+
+    pending.resolve({
+      stdout: this.textDecoder.decode(this.concatChunks(pending.stdout)),
+      stderr: this.textDecoder.decode(this.concatChunks(pending.stderr)),
+      exitCode,
+    });
+  }
+
+  private failExec(error: Error): void {
+    const pending = this.pendingExec;
+    if (!pending || pending.finished) return;
+
+    pending.finished = true;
+    clearTimeout(pending.timer);
+    this.channels.delete(pending.channelID);
+    this.pendingExec = null;
+    pending.reject(error);
+  }
+
+  private async closeExecChannel(channelID: number): Promise<void> {
+    const channel = this.channels.get(channelID);
+    if (!channel || channel.isClosed()) return;
+    try {
+      await this.sendEncrypted(channel.buildEof());
+      await this.sendEncrypted(channel.buildClose());
+    } catch {
+      // ignore
+    }
+    this.channels.delete(channelID);
   }
 
   private async startReading(): Promise<void> {
@@ -945,10 +1065,15 @@ export class SSHSession {
         break;
 
       case SSH_MSG_USERAUTH_SUCCESS:
-        this.sendStatus('认证成功');
-        this.state = 'shell';
-        this.startKeepalive();
-        await this.openShell();
+        if (this.execOnly) {
+          this.state = 'ready';
+          this.startKeepalive();
+        } else {
+          this.sendStatus('认证成功');
+          this.state = 'shell';
+          this.startKeepalive();
+          await this.openShell();
+        }
         break;
 
       case SSH_MSG_USERAUTH_FAILURE:
@@ -996,6 +1121,10 @@ export class SSHSession {
           this.sendDebug(`SFTP channel confirmed, sending subsystem request`);
           const subsystemReq = channel.buildSubsystemRequest('sftp');
           await this.sendEncrypted(subsystemReq);
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          const execReq = channel.buildExecRequest(this.pendingExec.command);
+          await this.sendEncrypted(execReq);
+          this.pendingExec.execSent = true;
         }
         break;
       }
@@ -1015,7 +1144,9 @@ export class SSHSession {
           this.sendDebug(`SFTP channel open failed: reason=${reasonCode}, desc=${description}`);
           this.sendSFTPError('init', '服务器不支持 SFTP: ' + description);
           this.sftpHandler = null;
-        } else {
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          this.failExec(new Error(description || 'Exec 通道打开失败'));
+        } else if (channelID === this.shellChannel.getLocalChannelID()) {
           // Shell channel failed - close connection
           this.sendError('通道打开被拒绝');
           this.close();
@@ -1065,6 +1196,8 @@ export class SSHSession {
           this.sendSFTPError('init', 'SFTP subsystem 请求被拒绝');
           this.sftpHandler.dispose();
           this.sftpHandler = null;
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          this.failExec(new Error('Exec 请求被拒绝'));
         } else if (this.state === 'shell' || this.state === 'shell-requested') {
           this.sendError('PTY 或 Shell 请求被拒绝');
           this.close();
@@ -1103,6 +1236,10 @@ export class SSHSession {
           this.sendDebug(() => `SFTP CHANNEL_DATA received: channelID=${channelID}, dataLen=${sftpData.length}, firstByte=${sftpData[0]}`);
           this.sftpHandler.onChannelData(sftpData);
           this.queueLocalWindowAdjust(sftpData.length, channel);
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          const outputData = channel.handleChannelData(payload);
+          this.pendingExec.stdout.push(outputData);
+          this.queueLocalWindowAdjust(outputData.length, channel);
         }
         break;
       }
@@ -1126,8 +1263,15 @@ export class SSHSession {
             this.sendDebug(() => `Send stderr output failed: ${e instanceof Error ? e.message : e}`);
           }
           this.queueLocalWindowAdjust(stderrData.length, channel);
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          let offset = 1 + 4;
+          offset += 4;
+          const dataLen = readUint32(payload, offset);
+          offset += 4;
+          const stderrData = payload.subarray(offset, offset + dataLen);
+          this.pendingExec.stderr.push(stderrData);
+          this.queueLocalWindowAdjust(stderrData.length, channel);
         }
-        // SFTP channel extended data is rare, just ignore
         break;
       }
 
@@ -1151,6 +1295,10 @@ export class SSHSession {
           // Shell channel EOF - close connection
           this.sendStatus('会话已结束');
           this.close(true);
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          if (!this.pendingExec.finished) {
+            this.finalizeExec(0);
+          }
         } else {
           // Other channel (SFTP etc.) EOF - don't close connection
           this.sendDebug(`Non-shell channel EOF: channelID=${channelID}`);
@@ -1170,6 +1318,12 @@ export class SSHSession {
           // Shell channel closed - close connection
           this.sendStatus('会话已结束');
           this.close(true);
+        } else if (this.pendingExec && channelID === this.pendingExec.channelID) {
+          if (!this.pendingExec.finished) {
+            this.finalizeExec(0);
+          } else {
+            this.channels.delete(channelID);
+          }
         } else {
           // Other channel (SFTP etc.) closed - clean up that channel only
           this.sendDebug(`Non-shell channel closed: channelID=${channelID}`);
@@ -1177,6 +1331,30 @@ export class SSHSession {
           if (this.sftpHandler && channelID === this.sftpHandler.getChannelID()) {
             this.sftpHandler.onChannelClosed();
             this.sftpHandler = null;
+          }
+        }
+        break;
+      }
+
+      case SSH_MSG_CHANNEL_REQUEST: {
+        const recipientChannel = readUint32(payload, 1);
+        let offset = 5;
+        const typeLen = readUint32(payload, offset);
+        offset += 4;
+        const requestType = this.textDecoder.decode(
+          payload.subarray(offset, offset + typeLen),
+        );
+        offset += typeLen;
+
+        if (this.pendingExec && recipientChannel === this.pendingExec.channelID) {
+          if (requestType === 'exit-status') {
+            offset += 1;
+            const exitCode = readUint32(payload, offset);
+            void this.closeExecChannel(this.pendingExec.channelID);
+            this.finalizeExec(exitCode);
+          } else if (requestType === 'exit-signal') {
+            void this.closeExecChannel(this.pendingExec.channelID);
+            this.finalizeExec(128);
           }
         }
         break;
@@ -1593,6 +1771,9 @@ export class SSHSession {
     if (this.sftpHandler) {
       this.sftpHandler.dispose();
       this.sftpHandler = null;
+    }
+    if (this.pendingExec) {
+      this.failExec(new Error('SSH 会话已关闭'));
     }
     this.channels.clear();
     this.channelDataQueue = [];

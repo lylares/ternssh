@@ -30,7 +30,6 @@ sessionRoutes.post("/", async (c) => {
     .bind(sessionId, user.id, server.id)
     .run();
 
-  const doId = c.env.SSH_SESSION.idFromName(`${user.id}:${sessionId}`);
   const wsUrl = new URL(c.req.url);
   wsUrl.pathname = `/api/v1/sessions/${sessionId}/ws`;
   const sftpUrl = new URL(c.req.url);
@@ -44,9 +43,15 @@ sessionRoutes.post("/", async (c) => {
   });
 });
 
-sessionRoutes.get("/:id/sftp/ws", async (c) => {
+async function forwardToSessionDo(
+  c: {
+    env: Env;
+    get: (key: "user") => { id: string };
+    req: { param: (key: string) => string; raw: Request };
+  },
+  sessionId: string,
+) {
   const user = c.get("user");
-  const sessionId = c.req.param("id");
 
   const session = await c.env.DB
     .prepare(
@@ -56,30 +61,22 @@ sessionRoutes.get("/:id/sftp/ws", async (c) => {
     .first<{ id: string; user_id: string; server_id: string; status: string }>();
 
   if (!session) {
-    return jsonError(c, 404, "session not found");
+    return jsonError(c as never, 404, "session not found");
   }
 
   const doId = c.env.SSH_SESSION.idFromName(`${user.id}:${sessionId}`);
   const stub = c.env.SSH_SESSION.get(doId);
   return stub.fetch(c.req.raw);
+}
+
+sessionRoutes.get("/:id/status", async (c) => {
+  return forwardToSessionDo(c, c.req.param("id"));
+});
+
+sessionRoutes.get("/:id/sftp/ws", async (c) => {
+  return forwardToSessionDo(c, c.req.param("id"));
 });
 
 sessionRoutes.get("/:id/ws", async (c) => {
-  const user = c.get("user");
-  const sessionId = c.req.param("id");
-
-  const session = await c.env.DB
-    .prepare(
-      "SELECT id, user_id, server_id, status FROM sessions WHERE id = ? AND user_id = ?",
-    )
-    .bind(sessionId, user.id)
-    .first<{ id: string; user_id: string; server_id: string; status: string }>();
-
-  if (!session) {
-    return jsonError(c, 404, "session not found");
-  }
-
-  const doId = c.env.SSH_SESSION.idFromName(`${user.id}:${sessionId}`);
-  const stub = c.env.SSH_SESSION.get(doId);
-  return stub.fetch(c.req.raw);
+  return forwardToSessionDo(c, c.req.param("id"));
 });

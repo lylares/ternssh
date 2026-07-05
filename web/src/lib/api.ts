@@ -1,3 +1,5 @@
+import type { SessionStatusResponse } from "./server-status";
+
 export interface User {
   id: string;
   email: string | null;
@@ -162,4 +164,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ serverId }),
     }),
+  getSessionStatus: (sessionId: string) =>
+    request<SessionStatusResponse>(`/api/v1/sessions/${sessionId}/status`),
 };

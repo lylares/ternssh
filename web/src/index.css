@@ -14,12 +14,20 @@
   --color-border: oklch(0.3 0 0);
   --color-input: oklch(0.3 0 0);
   --color-ring: oklch(0.72 0.14 165);
+  --app-min-width: 1280px;
+  --workspace-header-height: 48px;
+}
+
+html {
+  min-width: var(--app-min-width);
 }
 
 body {
   margin: 0;
+  min-width: var(--app-min-width);
   height: 100vh;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--color-background);
   color: var(--color-foreground);
   font-family:
@@ -32,25 +40,25 @@ body {
 }
 
 #root {
+  min-width: var(--app-min-width);
   height: 100vh;
 }
 
 .app-shell {
   position: relative;
+  min-width: var(--app-min-width);
   height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-  --workspace-header-height: 48px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .workspace-header {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 100;
   display: flex;
   height: var(--workspace-header-height);
+  min-width: var(--app-min-width);
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
@@ -75,10 +83,9 @@ body {
 }
 
 .workspace {
-  height: 100vh;
-  width: 100vw;
+  min-width: var(--app-min-width);
+  height: calc(100vh - var(--workspace-header-height));
   overflow: auto;
-  padding-top: var(--workspace-header-height);
 }
 
 .workspace-toast {

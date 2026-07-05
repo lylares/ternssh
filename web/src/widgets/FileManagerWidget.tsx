@@ -19,6 +19,7 @@ import {
 } from "@/lib/sessions";
 import {
   joinRemotePath,
+  isRemoteRoot,
   parentRemotePath,
   SftpClient,
   sortSftpEntries,
@@ -266,7 +267,7 @@ export function FileManagerWidget({
         {
           id: "up",
           label: "上级目录",
-          disabled: remotePath === ".",
+          disabled: isRemoteRoot(remotePath),
           onSelect: () => navigateTo(parentRemotePath(remotePath)),
         },
         {
@@ -330,7 +331,7 @@ export function FileManagerWidget({
         <Button
           size="sm"
           variant="secondary"
-          disabled={loading || !ready || remotePath === "."}
+          disabled={loading || !ready || isRemoteRoot(remotePath)}
           onClick={() => navigateTo(parentRemotePath(remotePath))}
           title="上级目录"
         >
