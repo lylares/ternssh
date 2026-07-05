@@ -46,6 +46,14 @@ export const en: Messages = {
     backgroundTooLarge: "Image must be smaller than {size}MB",
     widgetOpacity: "Widget opacity",
     widgetOpacityHint: "Lower values make widget backgrounds more transparent",
+    terminalTheme: "Terminal theme",
+    terminalThemeDefault: "Follow app theme",
+    terminalThemeCustom: "Custom",
+    terminalThemeHint:
+      "Background follows widget opacity; default uses app theme text and cursor colors",
+    terminalThemeReset: "Reset to current app theme colors",
+    terminalColorForeground: "Text",
+    terminalColorCursor: "Cursor",
   },
   widget: {
     server_list: "Servers",

@@ -44,6 +44,13 @@ export const zh = {
     backgroundTooLarge: "图片不能超过 {size}MB",
     widgetOpacity: "组件透明度",
     widgetOpacityHint: "数值越低，组件背景越透明",
+    terminalTheme: "终端主题",
+    terminalThemeDefault: "跟随应用主题",
+    terminalThemeCustom: "自定义",
+    terminalThemeHint: "背景随组件透明度；默认使用应用主题的文字与光标色",
+    terminalThemeReset: "重置为当前应用主题配色",
+    terminalColorForeground: "文字",
+    terminalColorCursor: "光标",
   },
   widget: {
     server_list: "服务器",

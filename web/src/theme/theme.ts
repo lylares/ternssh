@@ -40,17 +40,4 @@ export function applyTheme(mode: ThemeMode): ResolvedTheme {
   return resolved;
 }
 
-export function getTerminalTheme(resolved: ResolvedTheme) {
-  if (resolved === "light") {
-    return {
-      background: "#fafafa",
-      foreground: "#171717",
-      cursor: "#0f766e",
-    };
-  }
-  return {
-    background: "#0a0a0a",
-    foreground: "#f5f5f5",
-    cursor: "#72d4a8",
-  };
-}
+export { getTerminalTheme } from "./terminal-theme";

@@ -13,3 +13,13 @@ export {
   WIDGET_OPACITY_MIN,
   WIDGET_OPACITY_STORAGE_KEY,
 } from "./personalization";
+export type {
+  CustomTerminalThemeColors,
+  TerminalThemeColors,
+  TerminalThemeConfig,
+  TerminalThemeMode,
+} from "./terminal-theme";
+export {
+  DEFAULT_CUSTOM_TERMINAL_COLORS,
+  TERMINAL_THEME_STORAGE_KEY,
+} from "./terminal-theme";

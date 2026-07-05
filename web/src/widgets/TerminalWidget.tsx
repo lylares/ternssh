@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useI18n } from "@/i18n";
-import { getTerminalTheme, useTheme } from "@/theme";
+import { usePersonalization, type TerminalThemeColors } from "@/theme";
 import {
   MAX_SESSION_RECONNECT_ATTEMPTS,
   type ServerSession,
@@ -57,7 +57,7 @@ interface SessionPaneProps {
   onStatusChange: (status: ServerSession["status"]) => void;
   onClosed: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
-  resolvedTheme: "light" | "dark";
+  terminalColors: TerminalThemeColors;
 }
 
 function SessionPane({
@@ -66,7 +66,7 @@ function SessionPane({
   onStatusChange,
   onClosed,
   t,
-  resolvedTheme,
+  terminalColors,
 }: SessionPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -89,11 +89,15 @@ function SessionPane({
     if (!container) return;
 
     const terminal = new Terminal({
+      allowTransparency: true,
       cursorBlink: true,
       convertEol: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       fontSize: 13,
-      theme: getTerminalTheme(resolvedTheme),
+      theme: {
+        ...terminalColors,
+        background: "#00000000",
+      },
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -112,8 +116,11 @@ function SessionPane({
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    terminal.options.theme = getTerminalTheme(resolvedTheme);
-  }, [resolvedTheme]);
+    terminal.options.theme = {
+      ...terminalColors,
+      background: "#00000000",
+    };
+  }, [terminalColors]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -242,7 +249,7 @@ function SessionPane({
     <div
       ref={containerRef}
       className={cn(
-        "absolute inset-0 overflow-hidden bg-[var(--terminal-background)] p-1",
+        "terminal-widget-host absolute inset-0 overflow-hidden p-1",
         !active && "invisible pointer-events-none",
       )}
     />
@@ -257,7 +264,7 @@ export function TerminalWidget({
   onStatusChange,
 }: TerminalWidgetProps) {
   const { t } = useI18n();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTerminalColors } = usePersonalization();
   const activeSession = sessions.find(
     (session) => session.serverId === activeServerId,
   );
@@ -278,7 +285,7 @@ export function TerminalWidget({
           <SessionPane
             key={`${session.serverId}:${session.sessionId}`}
             active={session.serverId === activeServerId}
-            resolvedTheme={resolvedTheme}
+            terminalColors={resolvedTerminalColors}
             session={session}
             t={t}
             onClosed={() => onSessionClosed(session.serverId)}
