@@ -20,7 +20,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/preview.png" alt="ternssh 仪表盘预览" width="1024" />
+  <a href="https://raw.githubusercontent.com/HaradaKashiwa/ternssh/refs/heads/main/docs/preview.png">
+    <img src="docs/preview.png" alt="ternssh 仪表盘预览" width="1024" />
+  </a>
 </p>
 
 ---
