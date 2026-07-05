@@ -2,5 +2,7 @@ node_modules/
 .wrangler/
 .dev.vars
 dist/
+public/*
+!public/.gitkeep
 *.log
 .DS_Store

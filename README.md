@@ -2,11 +2,13 @@
 
 多用户 SSH 工具。用户通过可拖拽的仪表盘组件（服务器列表、终端、文件管理、状态监控等）构建属于自己的 SSH 工作台。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/HaradaKashiwa/ternssh)
+
 ## 技术栈
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| 前端 | React + Vite + shadcn/ui | SPA，拖拽式仪表盘布局 |
+| 前端 | React + Vite + shadcn/ui | 构建为静态资源，由 Workers 同域托管 |
 | 后端 | Cloudflare Workers | REST API、路由 |
 | 实时连接 | Durable Objects | SSH 会话与 WebSocket 长连接 |
 | 数据库 | Cloudflare D1 | 用户、服务器、布局等持久化数据 |
@@ -342,24 +344,56 @@ CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 
 ## 部署
 
-| 组件 | 平台 | 命令 |
+### 一键部署
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/HaradaKashiwa/ternssh)
+
+点击按钮会克隆仓库、构建 `web/` 静态前端到 `server/public/`，并部署 Workers（含 D1、Durable Objects 与静态资源）。`/api/*` 由 Worker 处理，其余路由回退到 SPA。
+
+### 手动部署
+
+```bash
+npm install
+npm run deploy          # 构建 web → server/public，再 wrangler deploy
+npm run db:migrate --prefix server   # 首次或 schema 变更后
+```
+
+| 组件 | 平台 | 说明 |
 |------|------|------|
-| 后端 | Cloudflare Workers | `cd server && wrangler deploy` |
+| 应用（API + 前端） | Cloudflare Workers | `server/public/` 为 Vite 构建产物 |
 | 数据库 | Cloudflare D1 | `wrangler d1 migrations apply` |
-| 前端 | Cloudflare Pages | `cd web && npm run build` → Pages 部署 |
 | 认证（可选） | Cloudflare Access | Zero Trust 控制台配置 Application Policy |
+
+本地开发仍可使用前后端分离模式：
+
+```bash
+npm run dev:server   # Workers API，:8787
+npm run dev:web      # Vite 开发服务器，代理 /api
+```
+
+集成预览（与生产相同，需先构建前端）：
+
+```bash
+npm run build
+npm run dev:server
+```
 
 **开放模式**：不配置 Access，设置 `ACCESS_ENABLED=false`，直接访问即可。
 
 **Access 模式**：在 Zero Trust 中为应用域名创建 Self-hosted Application，设置 `ACCESS_ENABLED=true` 并配置 `ACCESS_TEAM_DOMAIN` 与 `ACCESS_AUD`（Application AUD tag）。
 
-`wrangler.jsonc` 中需绑定 D1、Durable Objects 与 Secrets：
+`wrangler.jsonc` 中需绑定 D1、Durable Objects、静态资源与 Secrets：
 
 ```jsonc
 {
   "name": "ternssh-api",
   "main": "src/index.ts",
   "compatibility_date": "2024-11-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
   "d1_databases": [
     { "binding": "DB", "database_name": "ternssh", "database_id": "<id>" }
   ],
@@ -369,6 +403,8 @@ CREATE INDEX idx_sessions_user_id ON sessions(user_id);
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SshSession"] }]
 }
 ```
+
+前端构建产物输出到 `server/public/`（由 `web/vite.config.ts` 的 `build.outDir` 配置）。
 
 ## 开发路线
 
