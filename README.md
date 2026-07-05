@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="LICENSE">GPL-3.0-or-later</a>
+  ·
+  <a href="README.en.md">English</a>
 </p>
 
 <p align="center">
