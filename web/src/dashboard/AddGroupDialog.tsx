@@ -45,7 +45,7 @@ export function AddGroupDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-xl border bg-[var(--color-card)] p-6 shadow-xl">
+      <div className="w-full max-w-md bg-[var(--color-card)] p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">新建分组</h2>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

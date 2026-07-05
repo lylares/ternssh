@@ -50,7 +50,7 @@ export function TerminalWidget({
           选择服务器并点击连接以打开会话。
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-black/40 p-3 font-mono text-xs leading-6">
+      <div className="min-h-0 flex-1 overflow-auto bg-black/40 p-3 font-mono text-xs leading-6">
         {messages.length === 0 ? (
           <span className="text-[var(--color-muted-foreground)]">
             等待终端输出...

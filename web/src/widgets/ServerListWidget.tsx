@@ -180,7 +180,7 @@ export function ServerListWidget({
             <div key={`${node.type}:${node.id}`}>
               <div
                 className={cn(
-                  "relative h-1 rounded-full transition-colors",
+                  "relative h-1 transition-colors",
                   showBeforeDrop && "bg-[var(--color-primary)]",
                 )}
                 onDragOver={(event) => {
@@ -197,9 +197,9 @@ export function ServerListWidget({
 
               <div
                 className={cn(
-                  "rounded-lg border transition-colors",
-                  selected && "border-[var(--color-primary)] bg-[var(--color-secondary)]",
-                  showIntoDrop && "border-[var(--color-primary)] bg-[var(--color-secondary)]/60",
+                  "transition-colors",
+                  selected && "bg-[var(--color-secondary)]",
+                  showIntoDrop && "bg-[var(--color-secondary)]/60",
                 )}
                 style={{ marginLeft: depth * 14 }}
                 onDragOver={
@@ -224,7 +224,7 @@ export function ServerListWidget({
                 <div className="flex items-start gap-1 p-2">
                   <button
                     type="button"
-                    className="widget-no-drag mt-0.5 inline-flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] active:cursor-grabbing"
+                    className="widget-no-drag mt-0.5 inline-flex h-7 w-7 shrink-0 cursor-grab items-center justify-center text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] active:cursor-grabbing"
                     draggable
                     onDragStart={(event) =>
                       handleDragStart(event, {
@@ -241,7 +241,7 @@ export function ServerListWidget({
                   {isGroup ? (
                     <button
                       type="button"
-                      className="widget-no-drag mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-[var(--color-secondary)]"
+                      className="widget-no-drag mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center hover:bg-[var(--color-secondary)]"
                       onClick={() => toggleExpanded(node.id)}
                       aria-label={isExpanded ? "收起分组" : "展开分组"}
                     >
@@ -326,11 +326,11 @@ export function ServerListWidget({
         {dragItem && (
           <div
             className={cn(
-              "mt-1 h-8 rounded-md border border-dashed text-center text-xs leading-8 text-[var(--color-muted-foreground)]",
+              "mt-1 h-8 text-center text-xs leading-8 text-[var(--color-muted-foreground)]",
               dropIntent?.kind === "before" &&
                 dropIntent.parentId === null &&
                 dropIntent.index === tree.length &&
-                "border-[var(--color-primary)] text-[var(--color-primary)]",
+                "bg-[var(--color-secondary)] text-[var(--color-primary)]",
             )}
             onDragOver={handleRootDragOver}
             onDrop={(event) => {

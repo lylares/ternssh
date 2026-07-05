@@ -62,7 +62,7 @@ export function AddServerDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-xl border bg-[var(--color-card)] p-6 shadow-xl">
+      <div className="w-full max-w-lg bg-[var(--color-card)] p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">添加服务器</h2>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -113,7 +113,7 @@ export function AddServerDialog({
             <Label htmlFor="authType">认证方式</Label>
             <select
               id="authType"
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="flex h-9 w-full bg-[var(--color-secondary)] px-3 text-sm"
               value={authType}
               onChange={(event) =>
                 setAuthType(event.target.value as "password" | "private_key")
@@ -138,7 +138,7 @@ export function AddServerDialog({
             ) : (
               <textarea
                 id="credential"
-                className="min-h-28 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                className="min-h-28 w-full bg-[var(--color-secondary)] px-3 py-2 text-sm"
                 value={credential}
                 onChange={(event) => setCredential(event.target.value)}
                 required
