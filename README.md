@@ -40,7 +40,7 @@
 |------|------|
 | **服务器管理** | 分组树形结构、拖拽排序、复制/编辑、密码与私钥认证 |
 | **终端** | xterm.js + WebSocket；同一服务器多标签终端；命令联想与历史补全 |
-| **文件管理** | SFTP 浏览、上传/下载、拖拽上传、目录操作 |
+| **文件管理** | SFTP 浏览、上传/下载、拖拽上传、目录操作；双击或右键编辑远程文件（CodeMirror 语法高亮，最大 2 MB） |
 | **监控** | CPU / 内存 / 磁盘（Status）、网络带宽（Network）、进程列表（Process） |
 | **快捷命令** | 预设与自定义命令，支持当前终端或全部会话 |
 | **凭据库** | 已保存密码 / 私钥 vault（D1），添加服务器时可复用 |
@@ -54,7 +54,7 @@
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| 前端 | React + Vite + Tailwind | 构建为静态资源，由 Workers 同域托管 |
+| 前端 | React + Vite + Tailwind + CodeMirror | 构建为静态资源，由 Workers 同域托管；文件编辑使用 CodeMirror 6 |
 | 后端 | Cloudflare Workers | REST API、路由、身份解析 |
 | 实时连接 | Durable Objects | 每个 SSH 会话一个 DO 实例，WebSocket 长连接 |
 | SSH 协议 | 自研 TypeScript 栈 | 握手、Shell、SFTP、远程命令执行 |
@@ -192,7 +192,7 @@ ternssh/
 ├── web/                    # 前端（React + Vite）
 │   ├── public/logo.png     # 项目 Logo（favicon / 顶栏）
 │   └── src/
-│       ├── components/     # UI、设置、凭据字段
+│       ├── components/     # UI、设置、凭据字段、CodeEditor
 │       ├── dashboard/      # 网格布局、对话框
 │       ├── widgets/        # 终端、文件、监控等小部件
 │       ├── i18n/           # 中英文
@@ -259,13 +259,23 @@ flowchart TB
 |--------|------|
 | `server_list` | 分组树、连接/断开、搜索、拖拽排序 |
 | `terminal` | 多标签终端、命令联想（Tab / ↑↓） |
-| `file_manager` | SFTP 文件浏览与传输 |
+| `file_manager` | SFTP 文件浏览与传输；双击或右键「编辑」打开代码编辑器，支持语法高亮与 Ctrl/Cmd+S 保存 |
 | `status` | CPU、内存、磁盘、运行时间 |
 | `network` | 网卡流量与带宽曲线 |
 | `process` | Top 进程（CPU / 内存） |
 | `quick_commands` | 快捷命令（当前终端 / 全部会话） |
 
 默认布局：服务器列表 + 终端 + 文件管理（三列）。
+
+### 文件编辑
+
+文件管理小部件支持在浏览器内临时编辑远程文本文件：
+
+- **打开方式**：双击文件，或右键菜单选择「编辑」
+- **编辑器**：CodeMirror 6，含行号、语法高亮、括号匹配、代码折叠
+- **语言识别**：按扩展名自动匹配（如 `.js`、`.ts`、`.py`、`.json`、`.yaml`、`.sh` 等）
+- **保存**：工具栏保存按钮，或 `Ctrl/Cmd + S`；内容通过 SFTP 写回远程文件
+- **限制**：仅普通文件，最大 2 MB；关闭时有未保存更改时会提示确认
 
 ## API 概览
 
@@ -373,7 +383,7 @@ npm run db:migrate         # 远程（deploy 已包含）
 - [x] Workers + D1 脚手架，开放 / Access 双模式
 - [x] 自研 SSH 协议栈、Durable Object 会话
 - [x] 仪表盘拖拽布局与持久化
-- [x] 终端、SFTP 文件管理、状态/网络/进程监控
+- [x] 终端、SFTP 文件管理、远程文件临时编辑、状态/网络/进程监控
 - [x] 服务器分组、凭据 vault、多终端标签
 - [x] 个性化、国际化、站点名称、一键还原
 - [ ] 多仪表盘切换
