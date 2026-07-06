@@ -47,3 +47,11 @@
 - **HTTP Basic Auth**：同时设置 `BASICAUTH_USERNAME` 与 `BASICAUTH_PASSWORD`（Workers Dashboard 或 Docker 环境变量）
 
 详见 [Wiki · 鉴权](https://github.com/HaradaKashiwa/ternssh/wiki/zh-Security#鉴权)。
+
+## Star 走势
+
+<p align="center">
+  <a href="https://star-history.com/#HaradaKashiwa/ternssh&Date">
+    <img src="https://api.star-history.com/svg?repos=HaradaKashiwa/ternssh&type=Date" alt="Star History Chart" />
+  </a>
+</p>
