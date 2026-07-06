@@ -1,5 +1,11 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import {
+  getBasicAuthCredentials,
+  hasBasicAuthCredentials,
+  timingSafeEqual,
+  verifyPassword,
+} from "../db/basic-auth-credentials";
+import {
   clearBasicAuthLockout,
   getBasicAuthClientKey,
   getBasicAuthLockoutState,
@@ -8,16 +14,10 @@ import {
 import { ensureDefaultUser } from "../db/users";
 import type { User } from "../types";
 
-export type AuthMode = "open" | "access" | "basic" | "access+basic";
+export type AuthMode = "access" | "basic" | "onboarding";
 
 function isAccessConfigured(env: Env): boolean {
   return Boolean(env.ACCESS_TEAM_DOMAIN?.trim() && env.ACCESS_AUD?.trim());
-}
-
-function isBasicAuthConfigured(env: Env): boolean {
-  return Boolean(
-    env.BASICAUTH_USERNAME?.trim() && env.BASICAUTH_PASSWORD?.trim(),
-  );
 }
 
 function normalizeTeamDomain(raw: string): string {
@@ -40,18 +40,33 @@ function basicAuthLockoutError(retryAfterSeconds: number | null): IdentityError 
   );
 }
 
+export async function getAuthMode(env: Env): Promise<AuthMode> {
+  if (isAccessConfigured(env)) {
+    return "access";
+  }
+
+  if (await hasBasicAuthCredentials(env.DB)) {
+    return "basic";
+  }
+
+  return "onboarding";
+}
+
 async function verifyBasicAuth(
   request: Request,
   env: Env,
 ): Promise<void> {
+  const credentials = await getBasicAuthCredentials(env.DB);
+  if (!credentials) {
+    throw new IdentityError("Basic authentication not configured", 500);
+  }
+
   const clientKey = getBasicAuthClientKey(request);
   const lockout = await getBasicAuthLockoutState(env.DB, clientKey);
   if (lockout.locked) {
     throw basicAuthLockoutError(lockout.retryAfterSeconds);
   }
 
-  const expectedUser = env.BASICAUTH_USERNAME?.trim() ?? "";
-  const expectedPassword = env.BASICAUTH_PASSWORD?.trim() ?? "";
   const header = request.headers.get("Authorization");
 
   if (!header?.startsWith("Basic ")) {
@@ -74,7 +89,14 @@ async function verifyBasicAuth(
 
   const username = decoded.slice(0, separator);
   const password = decoded.slice(separator + 1);
-  if (username !== expectedUser || password !== expectedPassword) {
+  const usernameMatches = timingSafeEqual(username, credentials.username);
+  const passwordMatches = await verifyPassword(
+    password,
+    credentials.passwordHash,
+    credentials.salt,
+  );
+
+  if (!usernameMatches || !passwordMatches) {
     await recordBasicAuthFailure(env.DB, clientKey);
     const lockoutAfterFailure = await getBasicAuthLockoutState(env.DB, clientKey);
     if (lockoutAfterFailure.locked) {
@@ -121,11 +143,17 @@ export async function authenticateRequest(
   request: Request,
   env: Env,
 ): Promise<void> {
-  if (isBasicAuthConfigured(env)) {
+  const mode = await getAuthMode(env);
+
+  if (mode === "onboarding") {
+    throw new IdentityError("Setup required", 403);
+  }
+
+  if (mode === "basic") {
     await verifyBasicAuth(request, env);
   }
 
-  if (isAccessConfigured(env)) {
+  if (mode === "access") {
     const token = request.headers.get("Cf-Access-Jwt-Assertion");
     if (!token) {
       throw new IdentityError("Missing Cf-Access-Jwt-Assertion header", 401);
@@ -149,15 +177,6 @@ export class IdentityError extends Error {
     super(message);
     this.name = "IdentityError";
   }
-}
-
-export function getAuthMode(env: Env): AuthMode {
-  const access = isAccessConfigured(env);
-  const basic = isBasicAuthConfigured(env);
-  if (access && basic) return "access+basic";
-  if (access) return "access";
-  if (basic) return "basic";
-  return "open";
 }
 
 export function unauthorizedResponse(

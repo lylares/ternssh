@@ -1,13 +1,17 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
+  authenticateRequest,
+  getAuthMode,
   IdentityError,
-  resolveUser,
   unauthorizedResponse,
 } from "./auth/identity";
+import { ensureDefaultUser } from "./db/users";
 import { SshSession } from "./do/ssh-session";
 import { dashboardRoutes } from "./routes/dashboards";
+import { authRoutes } from "./routes/auth";
 import { meRoutes } from "./routes/me";
+import { onboardingRoutes } from "./routes/onboarding";
 import { savedPasswordRoutes } from "./routes/saved-passwords";
 import { savedPrivateKeyRoutes } from "./routes/saved-private-keys";
 import { serverRoutes } from "./routes/servers";
@@ -18,6 +22,12 @@ export { SshSession };
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const NO_INDEX_HEADER = "noindex, nofollow, noarchive";
+
+function isOnboardingPublicApiPath(pathname: string): boolean {
+  return pathname.startsWith("/api/v1/onboarding/");
+}
+
 app.use(
   "*",
   cors({
@@ -27,23 +37,61 @@ app.use(
   }),
 );
 
-app.use("/api/*", async (c, next) => {
-  try {
-    const user = await resolveUser(c.req.raw, c.env);
-    c.set("user", user);
+app.use("*", async (c, next) => {
+  const mode = await getAuthMode(c.env);
+  const pathname = new URL(c.req.url).pathname;
+  const acceptsJson = pathname.startsWith("/api/");
+
+  const applyNoIndex = () => {
+    c.header("X-Robots-Tag", NO_INDEX_HEADER);
+  };
+
+  if (mode === "onboarding") {
+    if (pathname.startsWith("/api/") && !isOnboardingPublicApiPath(pathname)) {
+      applyNoIndex();
+      return c.json({ error: "Setup required", authMode: "onboarding" }, 403);
+    }
+
     await next();
+    applyNoIndex();
+    return;
+  }
+
+  try {
+    await authenticateRequest(c.req.raw, c.env);
+    if (acceptsJson) {
+      c.set("user", await ensureDefaultUser(c.env.DB));
+    }
   } catch (error) {
     if (error instanceof IdentityError) {
-      return unauthorizedResponse(error, true);
+      const response = unauthorizedResponse(error, acceptsJson);
+      if (mode === "basic") {
+        response.headers.set("X-Robots-Tag", NO_INDEX_HEADER);
+      }
+      return response;
     }
     console.error("identity error", error);
-    return c.json({ error: "Unauthorized" }, 401);
+    const response = acceptsJson
+      ? c.json({ error: "Unauthorized" }, 401)
+      : new Response("Unauthorized", { status: 401 });
+    if (mode === "basic") {
+      response.headers.set("X-Robots-Tag", NO_INDEX_HEADER);
+    }
+    return response;
+  }
+
+  await next();
+  if (mode === "basic") {
+    applyNoIndex();
   }
 });
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
+app.route("/api/v1/onboarding", onboardingRoutes);
+
 const v1 = new Hono<{ Bindings: Env; Variables: Variables }>();
+v1.route("/auth", authRoutes);
 v1.route("/me", meRoutes);
 v1.route("/servers", serverRoutes);
 v1.route("/saved-passwords", savedPasswordRoutes);
@@ -53,18 +101,6 @@ v1.route("/sessions", sessionRoutes);
 
 app.route("/api/v1", v1);
 
-app.all("*", async (c) => {
-  try {
-    await resolveUser(c.req.raw, c.env);
-  } catch (error) {
-    if (error instanceof IdentityError) {
-      return unauthorizedResponse(error, false);
-    }
-    console.error("identity error", error);
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  return c.env.ASSETS.fetch(c.req.raw);
-});
+app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;

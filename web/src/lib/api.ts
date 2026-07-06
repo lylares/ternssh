@@ -69,7 +69,7 @@ export interface Dashboard {
 
 export interface MeResponse {
   user: User;
-  authMode: "open" | "access" | "basic" | "access+basic";
+  authMode: "access" | "basic" | "onboarding";
 }
 
 export interface CreateServerInput {
@@ -118,6 +118,13 @@ export interface SavedPrivateKeyRecord {
   updated_at: string;
 }
 
+export interface UpdateAuthCredentialsInput {
+  currentPassword: string;
+  username?: string;
+  newPassword?: string;
+  confirmPassword?: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -139,6 +146,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   getMe: () => request<MeResponse>("/api/v1/me"),
+  getAuthCredentials: () =>
+    request<{ username: string }>("/api/v1/auth/credentials"),
+  updateAuthCredentials: (input: UpdateAuthCredentialsInput) =>
+    request<{ username: string }>("/api/v1/auth/credentials", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
   getServerTree: () => request<{ tree: TreeNode[] }>("/api/v1/servers/tree"),
   listServers: () => request<{ tree: TreeNode[] }>("/api/v1/servers"),
   createServer: (input: CreateServerInput) =>

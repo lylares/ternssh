@@ -5,11 +5,11 @@ import type { Variables } from "../types";
 
 export const meRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-meRoutes.get("/", (c) => {
+meRoutes.get("/", async (c) => {
   const user = c.get("user");
   return c.json({
     user,
-    authMode: getAuthMode(c.env),
+    authMode: await getAuthMode(c.env),
   });
 });
 

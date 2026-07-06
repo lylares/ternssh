@@ -9,8 +9,6 @@ mkdir -p /app/.wrangler
 {
   [ -n "${ACCESS_TEAM_DOMAIN:-}" ] && printf 'ACCESS_TEAM_DOMAIN=%s\n' "$ACCESS_TEAM_DOMAIN"
   [ -n "${ACCESS_AUD:-}" ] && printf 'ACCESS_AUD=%s\n' "$ACCESS_AUD"
-  [ -n "${BASICAUTH_USERNAME:-}" ] && printf 'BASICAUTH_USERNAME=%s\n' "$BASICAUTH_USERNAME"
-  [ -n "${BASICAUTH_PASSWORD:-}" ] && printf 'BASICAUTH_PASSWORD=%s\n' "$BASICAUTH_PASSWORD"
 } > /app/.dev.vars
 
 echo "Applying D1 migrations (local)..."

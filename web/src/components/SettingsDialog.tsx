@@ -3,8 +3,10 @@ import { LanguageSelect } from "@/components/LanguageSelect";
 import { SiteNameField } from "@/components/SiteNameField";
 import { Modal } from "@/components/Modal";
 import { PersonalizationSection } from "@/components/PersonalizationSection";
+import { SecuritySection } from "@/components/SecuritySection";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
+import { api, type MeResponse } from "@/lib/api";
 import { useResetAllSettings } from "@/lib/use-reset-all-settings";
 import { cn } from "@/lib/utils";
 
@@ -13,31 +15,62 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type SettingsSection = "general" | "personalization";
-
-const SETTINGS_SECTIONS: Array<{
-  id: SettingsSection;
-  labelKey: "header.settingsGeneral" | "header.personalization";
-}> = [
-  { id: "general", labelKey: "header.settingsGeneral" },
-  { id: "personalization", labelKey: "header.personalization" },
-];
+type SettingsSection = "general" | "security" | "personalization";
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const t = useT();
   const resetAllSettings = useResetAllSettings();
   const [section, setSection] = useState<SettingsSection>("general");
+  const [authMode, setAuthMode] = useState<MeResponse["authMode"] | null>(null);
   const [resetStep, setResetStep] = useState<0 | 1 | 2>(0);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  const settingsSections: Array<{
+    id: SettingsSection;
+    labelKey:
+      | "header.settingsGeneral"
+      | "header.settingsSecurity"
+      | "header.personalization";
+    visible: boolean;
+  }> = [
+    { id: "general", labelKey: "header.settingsGeneral", visible: true },
+    {
+      id: "security",
+      labelKey: "header.settingsSecurity",
+      visible: authMode === "basic",
+    },
+    { id: "personalization", labelKey: "header.personalization", visible: true },
+  ];
+
   useEffect(() => {
-    if (open) {
-      setSection("general");
-      setResetStep(0);
-      setResetError(null);
-    }
+    if (!open) return;
+
+    setSection("general");
+    setResetStep(0);
+    setResetError(null);
+    setAuthMode(null);
+
+    let cancelled = false;
+    void api
+      .getMe()
+      .then((response) => {
+        if (!cancelled) setAuthMode(response.authMode);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthMode(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
+
+  useEffect(() => {
+    if (section === "security" && authMode !== "basic") {
+      setSection("general");
+    }
+  }, [authMode, section]);
 
   const handleReset = () => {
     setResetting(true);
@@ -70,22 +103,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           className="flex w-36 shrink-0 flex-col gap-1 border-r border-[var(--color-border)] bg-[var(--color-secondary)]/40 p-2"
           aria-label={t("header.settings")}
         >
-          {SETTINGS_SECTIONS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={cn(
-                "rounded px-3 py-2 text-left text-sm transition-colors",
-                section === item.id
-                  ? "bg-[var(--color-card)] font-medium text-[var(--color-foreground)] shadow-sm"
-                  : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] hover:text-[var(--color-foreground)]",
-              )}
-              aria-current={section === item.id ? "page" : undefined}
-              onClick={() => setSection(item.id)}
-            >
-              {t(item.labelKey)}
-            </button>
-          ))}
+          {settingsSections
+            .filter((item) => item.visible)
+            .map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "rounded px-3 py-2 text-left text-sm transition-colors",
+                  section === item.id
+                    ? "bg-[var(--color-card)] font-medium text-[var(--color-foreground)] shadow-sm"
+                    : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-secondary)] hover:text-[var(--color-foreground)]",
+                )}
+                aria-current={section === item.id ? "page" : undefined}
+                onClick={() => setSection(item.id)}
+              >
+                {t(item.labelKey)}
+              </button>
+            ))}
         </nav>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-6">
@@ -168,6 +203,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </div>
             </section>
           )}
+
+          {section === "security" && authMode === "basic" && <SecuritySection />}
 
           {section === "personalization" && <PersonalizationSection />}
         </div>

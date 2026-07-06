@@ -24,12 +24,6 @@
       },
       "ACCESS_AUD": {
         "description": "Application Audience (AUD) tag from your Access app. With ACCESS_TEAM_DOMAIN, enables JWT verification."
-      },
-      "BASICAUTH_USERNAME": {
-        "description": "HTTP Basic Auth username. With BASICAUTH_PASSWORD, protects the app behind Basic Auth."
-      },
-      "BASICAUTH_PASSWORD": {
-        "description": "HTTP Basic Auth password. Store as a Secret in production."
       }
     }
   },
