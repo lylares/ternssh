@@ -124,6 +124,14 @@ function resolveProductionIds() {
     }
   }
 
+  if (fs.existsSync(basePath)) {
+    const fromBase = readIdsFromFile(basePath);
+    if (fromBase) {
+      console.log("Using wrangler.jsonc.");
+      return fromBase;
+    }
+  }
+
   return null;
 }
 
@@ -166,12 +174,12 @@ console.log(
 const ids = resolveProductionIds();
 
 if (!ids) {
-  if (shouldResolveProduction()) {
+  if (requireConfig) {
     printSetupHelp(readDatabaseName());
     process.exit(1);
   }
 
-  console.log("Skipping production Wrangler config (local development).");
+  console.log("Skipping production Wrangler config (not required for this step).");
   process.exit(0);
 }
 

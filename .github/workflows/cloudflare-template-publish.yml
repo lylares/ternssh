@@ -1,0 +1,60 @@
+name: Publish Cloudflare template
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TEMPLATE_REPO: haradakashiwa/ternssh-cloudflare-workers-template
+
+jobs:
+  publish-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Prepare Cloudflare template snapshot
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          TEMPLATE_REPO: ${{ env.TEMPLATE_REPO }}
+        run: node scripts/prepare-cloudflare-template.mjs
+
+      - name: Push to template repository
+        env:
+          TEMPLATE_REPO_TOKEN: ${{ secrets.TEMPLATE_REPO_TOKEN }}
+        run: |
+          if [ -z "${TEMPLATE_REPO_TOKEN}" ]; then
+            echo "Missing secret TEMPLATE_REPO_TOKEN (needs repo scope on ${TEMPLATE_REPO})."
+            exit 1
+          fi
+
+          cd cloudflare-template
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release ${GITHUB_REF_NAME} from ${GITHUB_REPOSITORY}@${GITHUB_SHA:0:7}"
+          git branch -M main
+          git remote add origin "https://x-access-token:${TEMPLATE_REPO_TOKEN}@github.com/${TEMPLATE_REPO}.git"
+          git push --force origin main
+          git tag -f "${GITHUB_REF_NAME}"
+          git push --force origin "${GITHUB_REF_NAME}"

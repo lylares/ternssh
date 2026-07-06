@@ -8,4 +8,4 @@ dist/
 .dev.vars
 wrangler.production.jsonc
 .DS_Store
-wiki-repo/
+cloudflare-template/
