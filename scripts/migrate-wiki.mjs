@@ -30,8 +30,12 @@ function transformLinks(content) {
     .replace(/\]\(\.\.\/README\.md\)/g, "](Home)")
     .replace(/\]\(\.\.\/README\.en\.md\)/g, "](Home)")
     .replace(/\]\(\.\.\/\.\.\/([^)]+)\)/g, (_, path) => `](${REPO}/blob/main/${path})`)
-    .replace(/\]\(\.\.\/(zh|en)\/([^)]+\.md)\)/g, (_, lang, file) => `](${wikiPage(lang, file)})`)
-    .replace(/\]\((zh|en)\/([^)]+\.md)\)/g, (_, lang, file) => `](${wikiPage(lang, file)})`);
+    .replace(/\]\(\.\.\/(zh|en)\/([^#)]+\.md)(#[^)]*)?\)/g, (_, lang, file, anchor = "") =>
+      `](${wikiPage(lang, file)}${anchor})`,
+    )
+    .replace(/\]\((zh|en)\/([^#)]+\.md)(#[^)]*)?\)/g, (_, lang, file, anchor = "") =>
+      `](${wikiPage(lang, file)}${anchor})`,
+    );
 }
 
 function writePage(filename, content) {
