@@ -58,6 +58,7 @@ export function NetworkBandwidthChart({
   const historyTxMax = Math.max(...history.map((sample) => sample.tx), 0);
   const rxScaleMax = historyRxMax > 0 ? historyRxMax : 1;
   const txScaleMax = historyTxMax > 0 ? historyTxMax : 1;
+  const chartScaleMax = Math.max(rxScaleMax, txScaleMax, 1);
   const slots = buildBandwidthSlots(history, maxSlots);
   const historyMinutes = BANDWIDTH_HISTORY_MS / 60000;
 
@@ -117,14 +118,14 @@ export function NetworkBandwidthChart({
             {slots.map((sample, index) => (
               <div
                 key={index}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-px"
+                className="relative h-full min-w-0 flex-1"
               >
                 {sample ? (
                   <>
                     <div
-                      className="w-1/2 bg-sky-400/90 transition-all"
+                      className="absolute bottom-0 left-1/2 w-full max-w-[8px] -translate-x-1/2 rounded-sm bg-sky-400/40 transition-all"
                       style={{
-                        height: `${barHeightPx(sample.rx, rxScaleMax)}px`,
+                        height: `${barHeightPx(sample.rx, chartScaleMax)}px`,
                       }}
                       title={t("status.sampleDownload", {
                         time: new Date(sample.at).toLocaleTimeString(),
@@ -132,9 +133,9 @@ export function NetworkBandwidthChart({
                       })}
                     />
                     <div
-                      className="w-1/2 bg-[var(--color-success)]/90 transition-all"
+                      className="absolute bottom-0 left-1/2 w-full max-w-[8px] -translate-x-1/2 rounded-sm bg-[var(--color-success)]/55 transition-all"
                       style={{
-                        height: `${barHeightPx(sample.tx, txScaleMax)}px`,
+                        height: `${barHeightPx(sample.tx, chartScaleMax)}px`,
                       }}
                       title={t("status.sampleUpload", {
                         time: new Date(sample.at).toLocaleTimeString(),
@@ -143,10 +144,7 @@ export function NetworkBandwidthChart({
                     />
                   </>
                 ) : (
-                  <>
-                    <div className="w-1/2 rounded-sm bg-[var(--color-secondary)]/80" />
-                    <div className="w-1/2 rounded-sm bg-[var(--color-secondary)]/80" />
-                  </>
+                  <div className="absolute bottom-0 left-1/2 h-1 w-full max-w-[8px] -translate-x-1/2 rounded-sm bg-[var(--color-secondary)]/80" />
                 )}
               </div>
             ))}

@@ -1,7 +1,7 @@
 export const DEFAULT_POLL_INTERVAL_MS = 5000;
 export const MIN_POLL_INTERVAL_MS = 3000;
 export const MAX_POLL_INTERVAL_MS = 60000;
-export const BANDWIDTH_HISTORY_MS = 2 * 60 * 1000;
+export const BANDWIDTH_HISTORY_MS = 10 * 60 * 1000;
 export const DEFAULT_PROCESS_LIMIT = 10;
 export const MIN_PROCESS_LIMIT = 1;
 export const MAX_PROCESS_LIMIT = 50;
