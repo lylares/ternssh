@@ -212,10 +212,11 @@ function SessionPane({
     onStatusChangeRef.current("connecting");
     terminal.reset();
     draftRef.current = "";
-    if (session.reconnectAttempt && session.reconnectAttempt > 0) {
+    const reconnectAttempt = session.reconnectAttempt;
+    if (reconnectAttempt && reconnectAttempt > 0) {
       terminal.writeln(
         t("session.reconnecting", {
-          current: session.reconnectAttempt,
+          current: reconnectAttempt,
           max: MAX_SESSION_RECONNECT_ATTEMPTS,
         }),
       );
@@ -253,7 +254,6 @@ function SessionPane({
     };
 
     ws.onopen = () => {
-      onStatusChangeRef.current("open");
       sendResize();
     };
 
@@ -302,6 +302,7 @@ function SessionPane({
           }
           if (control.kind === "ready" && !ready) {
             ready = true;
+            onStatusChangeRef.current("open");
             terminal.reset();
             draftRef.current = "";
             sendResize();
@@ -392,7 +393,7 @@ function SessionPane({
       wsRef.current = null;
       runCommandRef.current = () => false;
     };
-  }, [session.reconnectAttempt, session.serverId, session.sessionId, session.wsUrl, t]);
+  }, [session.serverId, session.sessionId, session.wsUrl, t]);
 
   useEffect(() => {
     if (!active) return;

@@ -146,18 +146,18 @@ export function DashboardView() {
   const reconnectAttemptRef = useRef(new Map<string, number>());
   const reconnectTimerRef = useRef(new Map<string, number>());
 
-  const clearReconnectTimer = useCallback((sessionId: string) => {
-    const timer = reconnectTimerRef.current.get(sessionId);
+  const clearReconnectTimer = useCallback((serverId: string) => {
+    const timer = reconnectTimerRef.current.get(serverId);
     if (timer !== undefined) {
       window.clearTimeout(timer);
-      reconnectTimerRef.current.delete(sessionId);
+      reconnectTimerRef.current.delete(serverId);
     }
   }, []);
 
   const clearReconnectState = useCallback(
-    (sessionId: string) => {
-      clearReconnectTimer(sessionId);
-      reconnectAttemptRef.current.delete(sessionId);
+    (serverId: string) => {
+      clearReconnectTimer(serverId);
+      reconnectAttemptRef.current.delete(serverId);
     },
     [clearReconnectTimer],
   );
@@ -231,12 +231,15 @@ export function DashboardView() {
     (sessionId: string) => {
       const session = sessionsRef.current[sessionId];
       if (!session) return;
-      if (manualDisconnectServersRef.current.has(session.serverId)) return;
+      const { serverId } = session;
+      if (manualDisconnectServersRef.current.has(serverId)) return;
       if (manualCloseSessionsRef.current.has(sessionId)) return;
+      if (session.status === "connecting") return;
+      if (reconnectTimerRef.current.has(serverId)) return;
 
-      const nextAttempt = (reconnectAttemptRef.current.get(sessionId) ?? 0) + 1;
+      const nextAttempt = (reconnectAttemptRef.current.get(serverId) ?? 0) + 1;
       if (nextAttempt > MAX_SESSION_RECONNECT_ATTEMPTS) {
-        clearReconnectState(sessionId);
+        clearReconnectState(serverId);
         setSessions((current) => {
           const currentSession = current[sessionId];
           if (!currentSession) return current;
@@ -257,7 +260,7 @@ export function DashboardView() {
         return;
       }
 
-      reconnectAttemptRef.current.set(sessionId, nextAttempt);
+      reconnectAttemptRef.current.set(serverId, nextAttempt);
       setSessions((current) => {
         const currentSession = current[sessionId];
         if (!currentSession) return current;
@@ -271,9 +274,9 @@ export function DashboardView() {
         };
       });
 
-      clearReconnectTimer(sessionId);
+      clearReconnectTimer(serverId);
       const timer = window.setTimeout(() => {
-        reconnectTimerRef.current.delete(sessionId);
+        reconnectTimerRef.current.delete(serverId);
         void (async () => {
           const currentSession = sessionsRef.current[sessionId];
           if (!currentSession) return;
@@ -309,13 +312,12 @@ export function DashboardView() {
             setActiveSessionId((active) =>
               active === sessionId ? created.sessionId : active,
             );
-            clearReconnectState(sessionId);
           } catch {
             scheduleReconnect(sessionId);
           }
         })();
       }, SESSION_RECONNECT_DELAY_MS);
-      reconnectTimerRef.current.set(sessionId, timer);
+      reconnectTimerRef.current.set(serverId, timer);
     },
     [clearReconnectState, clearReconnectTimer, t],
   );
@@ -323,7 +325,10 @@ export function DashboardView() {
   const handleSessionStatusChange = useCallback(
     (sessionId: string, status: SessionStatus) => {
       if (status === "open") {
-        clearReconnectState(sessionId);
+        const session = sessionsRef.current[sessionId];
+        if (session) {
+          clearReconnectState(session.serverId);
+        }
       }
       setSessions((current) => {
         const session = current[sessionId];
@@ -352,7 +357,7 @@ export function DashboardView() {
       if (!session) return;
       if (manualDisconnectServersRef.current.has(session.serverId)) return;
       if (reason === "auth_failed") {
-        clearReconnectState(sessionId);
+        clearReconnectState(session.serverId);
         return;
       }
       scheduleReconnect(sessionId);
@@ -366,7 +371,7 @@ export function DashboardView() {
       const forServer = getSessionsForServer(sessionsRef.current, serverId);
       for (const session of forServer) {
         manualCloseSessionsRef.current.add(session.sessionId);
-        clearReconnectState(session.sessionId);
+        clearReconnectState(serverId);
         releaseSftpClient(session.sessionId);
       }
 
@@ -460,7 +465,10 @@ export function DashboardView() {
   const handleCloseTerminal = useCallback(
     (sessionId: string) => {
       manualCloseSessionsRef.current.add(sessionId);
-      clearReconnectState(sessionId);
+      const session = sessionsRef.current[sessionId];
+      if (session) {
+        clearReconnectState(session.serverId);
+      }
       releaseSftpClient(sessionId);
       setSessions((current) => {
         const session = current[sessionId];
