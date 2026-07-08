@@ -18,6 +18,7 @@ import { usePersonalization } from "@/theme";
 import { parseStatusWidgetConfig, DEFAULT_PROCESS_LIMIT } from "@/lib/status-widget-config";
 import { ServerListWidget } from "@/widgets/ServerListWidget";
 import { FileManagerWidget } from "@/widgets/FileManagerWidget";
+import { AiCommandWidget } from "@/widgets/AiCommandWidget";
 import { QuickCommandsWidget } from "@/widgets/QuickCommandsWidget";
 import { StatusWidget } from "@/widgets/StatusWidget";
 import { NetworkStatusWidget } from "@/widgets/NetworkStatusWidget";
@@ -26,6 +27,7 @@ import { TerminalWidget } from "@/widgets/TerminalWidget";
 import type { SessionCloseReason } from "@/widgets/types";
 import { AddGroupDialog } from "./AddGroupDialog";
 import { AddQuickCommandDialog } from "./AddQuickCommandDialog";
+import { AiCommandSettingsDialog } from "./AiCommandSettingsDialog";
 import { AddServerDialog } from "./AddServerDialog";
 import { CopyServerDialog } from "./CopyServerDialog";
 import { EditServerDialog } from "./EditServerDialog";
@@ -133,6 +135,9 @@ export function DashboardView() {
   const [pollSettingsWidgetId, setPollSettingsWidgetId] = useState<
     string | null
   >(null);
+  const [aiSettingsWidgetId, setAiSettingsWidgetId] = useState<string | null>(
+    null,
+  );
   const dashboardRef = useRef<Dashboard | null>(null);
   const persistTimerRef = useRef<number | null>(null);
   const isEditingRef = useRef(false);
@@ -946,6 +951,31 @@ export function DashboardView() {
             );
           }
 
+          if (widget.type === "ai_command") {
+            return (
+              <div className="widget-no-drag flex items-center gap-1">
+                <Button
+                  className="widget-no-drag"
+                  size="sm"
+                  variant="secondary"
+                  title={t("common.settings")}
+                  onClick={() => setAiSettingsWidgetId(item.i)}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  className="widget-no-drag"
+                  size="sm"
+                  variant="secondary"
+                  title={t("widget.deleteTitle")}
+                  onClick={() => handleRemoveWidget(item.i)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            );
+          }
+
           return null;
         }}
         renderItem={(item) => {
@@ -1076,6 +1106,17 @@ export function DashboardView() {
             );
           }
 
+          if (widget.type === "ai_command") {
+            return (
+              <AiCommandWidget
+                activeServerId={activeServerId}
+                activeSessionId={activeSessionId}
+                configJson={widget.config_json}
+                sessions={sessions}
+              />
+            );
+          }
+
           return (
             <div className="flex h-full items-center justify-center p-3 text-sm text-[var(--color-muted-foreground)]">
               {t("widget.comingSoon", { type: widget.type })}
@@ -1184,6 +1225,23 @@ export function DashboardView() {
         onSaved={(configJson) => {
           if (pollSettingsWidgetId) {
             handleWidgetConfigChange(pollSettingsWidgetId, configJson);
+          }
+        }}
+      />
+
+      <AiCommandSettingsDialog
+        configJson={
+          dashboard.widgets.find(
+            (widget) => widget.id === aiSettingsWidgetId,
+          )?.config_json ?? null
+        }
+        open={aiSettingsWidgetId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAiSettingsWidgetId(null);
+        }}
+        onSaved={(configJson) => {
+          if (aiSettingsWidgetId) {
+            handleWidgetConfigChange(aiSettingsWidgetId, configJson);
           }
         }}
       />

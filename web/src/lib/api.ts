@@ -269,4 +269,19 @@ export const api = {
       `/api/v1/sessions/${sessionId}/status${query ? `?${query}` : ""}`,
     );
   },
+  generateAiCommand: (
+    input: {
+      prompt: string;
+      history?: string[];
+      apiBaseUrl: string;
+      apiKey: string;
+      model: string;
+    },
+    options?: { signal?: AbortSignal },
+  ) =>
+    request<{ command: string }>("/api/v1/ai/generate-command", {
+      method: "POST",
+      body: JSON.stringify(input),
+      signal: options?.signal,
+    }),
 };
